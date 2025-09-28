@@ -1,0 +1,24 @@
+import SwiftUI
+
+@main
+struct yt_dlp_guiApp: App {
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unified)
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Preferences...") {
+                    NotificationCenter.default.post(name: .openSettings, object: nil)
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
+        }
+    }
+}
+
+extension Notification.Name {
+    static let openSettings = Notification.Name("openSettings")
+}

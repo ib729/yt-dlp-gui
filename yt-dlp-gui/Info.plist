@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>&lt;key&gt;NSDocumentsFolderUsageDescription&lt;/key&gt;
+&lt;string&gt;This app needs access to select download folders&lt;/string&gt;
+&lt;key&gt;NSDownloadsFolderUsageDescription&lt;/key&gt;
+&lt;string&gt;This app downloads videos to your Downloads folder&lt;/string&gt;</string>
+</dict>
+</plist>
