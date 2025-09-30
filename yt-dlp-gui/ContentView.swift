@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct ContentView: View {
     @State private var url: String = ""
@@ -65,6 +66,7 @@ struct ContentView: View {
             
             VStack(alignment: .leading, spacing: 16) {
                 logsSection
+                    .frame(maxHeight: .infinity, alignment: .topLeading)
                 rawOutputSection
                 Spacer(minLength: 0)
             }
@@ -171,56 +173,68 @@ struct ContentView: View {
 
     @ViewBuilder
     private var logsSection: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Session Activity")
-                        .font(.headline)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Text("Session Log")
+                    .font(.headline)
+                    .foregroundColor(.primary)
 
-                    Spacer()
+                Spacer()
 
-                    if !downloadManager.downloadLogs.isEmpty {
-                        Button("Clear") {
-                            downloadManager.clearLogs()
-                        }
-                        .controlSize(.small)
+                if !downloadManager.downloadLogs.isEmpty {
+                    Button("Copy") {
+                        copyLogsToPasteboard()
                     }
-                }
+                    .controlSize(.small)
 
-                if downloadManager.downloadLogs.isEmpty {
-                    Text("Logs will appear here once a download starts.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 20)
-                } else {
-                    ScrollView {
-                        ScrollViewReader { proxy in
-                            VStack(alignment: .leading, spacing: 2) {
-                                ForEach(Array(downloadManager.downloadLogs.enumerated()), id: \.offset) { index, log in
-                                    Text(log)
-                                        .font(.system(.caption, design: .monospaced))
-                                        .foregroundColor(.secondary)
-                                        .textSelection(.enabled)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .id(index)
-                                }
-                            }
-                            .onChange(of: downloadManager.downloadLogs.count) {
-                                if let lastIndex = downloadManager.downloadLogs.indices.last {
-                                    withAnimation(.easeInOut(duration: 0.25)) {
-                                        proxy.scrollTo(lastIndex, anchor: .bottom)
-                                    }
-                                }
-                            }
-                        }
+                    Button("Clear") {
+                        downloadManager.clearLogs()
                     }
-                    .frame(maxHeight: 220)
+                    .controlSize(.small)
                 }
             }
-        } label: {
-            Label("Session Log", systemImage: "list.bullet.rectangle")
+
+            if downloadManager.downloadLogs.isEmpty {
+                Text("Logs will appear here once a download starts.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 20)
+            } else {
+                ScrollView {
+                    ScrollViewReader { proxy in
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(Array(downloadManager.downloadLogs.enumerated()), id: \.offset) { index, log in
+                                Text(log)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .foregroundColor(.secondary)
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .id(index)
+                            }
+                        }
+                        .onChange(of: downloadManager.downloadLogs.count) {
+                            if let lastIndex = downloadManager.downloadLogs.indices.last {
+                                withAnimation(.easeInOut(duration: 0.25)) {
+                                    proxy.scrollTo(lastIndex, anchor: .bottom)
+                                }
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
         }
+        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(NSColor.windowBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color(NSColor.separatorColor).opacity(0.25), lineWidth: 1)
+        )
     }
 
     @ViewBuilder
@@ -274,6 +288,13 @@ struct ContentView: View {
                     .foregroundColor(.secondary)
             }
         }
+    }
+    
+    private func copyLogsToPasteboard() {
+        let pasteboard = NSPasteboard.general
+        let joinedLogs = downloadManager.downloadLogs.joined(separator: "\n")
+        pasteboard.clearContents()
+        pasteboard.setString(joinedLogs, forType: .string)
     }
     
     private func startDownload() {
