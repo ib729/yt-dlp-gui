@@ -58,11 +58,11 @@ struct ContentView: View {
     
     private var urlInputSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Video URL", systemImage: "link")
+            Text("Video/Playlist URL")
                 .font(.headline)
                 .foregroundColor(.primary)
             
-            TextField("Enter YouTube or video URL...", text: $url)
+            TextField("Enter video or playlist URL...", text: $url)
                 .textFieldStyle(.roundedBorder)
                 .font(.system(.body, design: .monospaced))
                 .onSubmit {

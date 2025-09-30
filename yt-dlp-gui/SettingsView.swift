@@ -94,6 +94,7 @@ struct SettingsView: View {
                         Text("MP3").tag("mp3")
                         Text("AAC").tag("aac")
                         Text("OGG Vorbis").tag("ogg")
+                        Text("Opus").tag("opus")
                         Text("M4A").tag("m4a")
                         Text("FLAC").tag("flac")
                         Text("WAV").tag("wav")

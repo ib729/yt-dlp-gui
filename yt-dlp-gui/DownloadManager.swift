@@ -368,8 +368,29 @@ class DownloadManager: ObservableObject {
             return "vorbis"
         case "m4a":
             return "aac"
+        case "opus":
+            return "opus"
         default:
             return format
+        }
+    }
+
+    private func mapAudioCodec(for format: String) -> String {
+        switch format.lowercased() {
+        case "mp3":
+            return "mp3"
+        case "aac", "m4a":
+            return "aac"
+        case "ogg":
+            return "ogg"
+        case "opus":
+            return "opus"
+        case "flac":
+            return "flac"
+        case "wav":
+            return "pcm_s16le"
+        default:
+            return "aac"
         }
     }
     
@@ -559,8 +580,14 @@ class DownloadManager: ObservableObject {
             args.append(contentsOf: ["-c:a", "aac"])
         case "mp3":
             args.append(contentsOf: ["-c:a", "libmp3lame"])
-        case "ogg":
+        case "ogg", "vorbis":
             args.append(contentsOf: ["-c:a", "libvorbis"])
+        case "opus":
+            args.append(contentsOf: ["-c:a", "libopus"])
+        case "flac":
+            args.append(contentsOf: ["-c:a", "flac"])
+        case "pcm_s16le", "wav":
+            args.append(contentsOf: ["-c:a", "pcm_s16le"])
         default:
             args.append(contentsOf: ["-c:a", "aac"])
         }
@@ -643,13 +670,17 @@ class DownloadManager: ObservableObject {
     
     func downloadVideo(url: String, settings: YtDlpSettings) {
         guard !isDownloading else { return }
-        
-        self.settings = settings
+
+        var effectiveSettings = settings
+        effectiveSettings.audioCodec = mapAudioCodec(for: settings.audioFormat)
+
+        self.settings = effectiveSettings
         self.needsConversion = false
         self.downloadedFilePath = ""
-        
-        let ytdlpPath = settings.customYtdlpPath.isEmpty ? findYTdlpPath() : expandPath(settings.customYtdlpPath)
-        
+
+        let ytdlpPath = effectiveSettings.customYtdlpPath.isEmpty ?
+            findYTdlpPath() : expandPath(effectiveSettings.customYtdlpPath)
+
         guard !ytdlpPath.isEmpty else {
             DispatchQueue.main.async {
                 self.statusMessage = "Error: yt-dlp not found. Please install it via Homebrew: brew install yt-dlp"
@@ -667,8 +698,8 @@ class DownloadManager: ObservableObject {
             addLog("Error: yt-dlp not found at path: \(ytdlpPath)")
             return
         }
-        
-        let args = buildDownloadArguments(for: url, settings: settings)
+
+        let args = buildDownloadArguments(for: url, settings: effectiveSettings)
         
         DispatchQueue.main.async {
             self.isDownloading = true
@@ -708,10 +739,10 @@ class DownloadManager: ObservableObject {
                 let exitCode = self.process?.terminationStatus ?? -1
                 if exitCode == 0 {
                     self.addLog("Download completed successfully")
-                    
+
                     // Check if we need processing
                     if self.needsConversion && !self.downloadedFilePath.isEmpty {
-                        self.processVideo(inputPath: self.downloadedFilePath, settings: settings)
+                        self.processVideo(inputPath: self.downloadedFilePath, settings: effectiveSettings)
                     } else {
                         DispatchQueue.main.async {
                             self.statusMessage = "Download completed successfully!"
