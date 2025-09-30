@@ -1,20 +1,13 @@
-# Xcode
 DerivedData/
 build/
 *.xcuserstate
 *.xcuserdata/
 *.xcscmblueprint
-
-# SwiftPM
 /.build/
 /Packages
 Package.resolved
-
-# CocoaPods
-/Pods/
-
-# Carthage
 /Carthage/Build/
-
-# General macOS
 .DS_Store
+AGENTS.md
+
+
