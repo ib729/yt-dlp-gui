@@ -35,6 +35,9 @@ struct SettingsView: View {
                             }
                             .controlSize(.small)
                         }
+                        Text("yt-dlp powers downloads. Install with: brew install yt-dlp")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
                     }
                     
                     VStack(alignment: .leading, spacing: 8) {

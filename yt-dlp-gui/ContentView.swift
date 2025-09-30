@@ -65,6 +65,26 @@ struct ContentView: View {
                 .padding(.vertical, -16)
             
             VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 12) {
+                    Text("Session Log")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+
+                    Spacer()
+
+                    if !downloadManager.downloadLogs.isEmpty {
+                        Button("Copy") {
+                            copyLogsToPasteboard()
+                        }
+                        .controlSize(.small)
+
+                        Button("Clear") {
+                            downloadManager.clearLogs()
+                        }
+                        .controlSize(.small)
+                    }
+                }
+
                 logsSection
                     .frame(maxHeight: .infinity, alignment: .topLeading)
                 rawOutputSection
@@ -84,11 +104,21 @@ struct ContentView: View {
                 .foregroundColor(.primary)
             
             TextField("Enter video or playlist URL...", text: $url)
-                .textFieldStyle(.roundedBorder)
-                .font(.system(.body, design: .monospaced))
+                .textFieldStyle(.plain)
+                .font(.body)
                 .textContentType(.URL)
                 .disableAutocorrection(true)
                 .submitLabel(.go)
+                .padding(.vertical, 10)
+                .padding(.horizontal, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color(NSColor.windowBackgroundColor))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color(NSColor.separatorColor).opacity(0.3), lineWidth: 1)
+                )
                 .help("Accepts full video or playlist links from YouTube or any yt-dlp supported site.")
                 .onSubmit {
                     if !url.isEmpty && !downloadManager.isDownloading {
@@ -96,9 +126,6 @@ struct ContentView: View {
                     }
                 }
 
-            Text("Supports playlists, shortened URLs, and authenticated sessions via Settings → Cookies.")
-                .font(.footnote)
-                .foregroundColor(.secondary)
         }
     }
     
@@ -106,7 +133,7 @@ struct ContentView: View {
     private var statusMessageView: some View {
         if !downloadManager.statusMessage.isEmpty {
             Text(downloadManager.statusMessage)
-                .font(.subheadline)
+                .font(.body)
                 .foregroundColor(.secondary)
                 .padding(.vertical, 10)
                 .padding(.horizontal, 12)
@@ -164,66 +191,34 @@ struct ContentView: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(Color(NSColor.separatorColor).opacity(0.25), lineWidth: 1)
             )
-        } else if downloadManager.downloadLogs.isEmpty {
-            Text("Drop a link above to start a download.")
-                .font(.footnote)
-                .foregroundColor(.secondary)
         }
     }
 
     @ViewBuilder
     private var logsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                Text("Session Log")
-                    .font(.headline)
-                    .foregroundColor(.primary)
-
-                Spacer()
-
-                if !downloadManager.downloadLogs.isEmpty {
-                    Button("Copy") {
-                        copyLogsToPasteboard()
-                    }
-                    .controlSize(.small)
-
-                    Button("Clear") {
-                        downloadManager.clearLogs()
-                    }
-                    .controlSize(.small)
-                }
-            }
-
-            if downloadManager.downloadLogs.isEmpty {
-                Text("Logs will appear here once a download starts.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 20)
-            } else {
-                ScrollView {
-                    ScrollViewReader { proxy in
-                        VStack(alignment: .leading, spacing: 2) {
-                            ForEach(Array(downloadManager.downloadLogs.enumerated()), id: \.offset) { index, log in
-                                Text(log)
-                                    .font(.system(.caption, design: .monospaced))
-                                    .foregroundColor(.secondary)
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .id(index)
-                            }
+            ScrollView {
+                ScrollViewReader { proxy in
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(Array(downloadManager.downloadLogs.enumerated()), id: \.offset) { index, log in
+                            Text(log)
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundColor(.secondary)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .id(index)
                         }
-                        .onChange(of: downloadManager.downloadLogs.count) {
-                            if let lastIndex = downloadManager.downloadLogs.indices.last {
-                                withAnimation(.easeInOut(duration: 0.25)) {
-                                    proxy.scrollTo(lastIndex, anchor: .bottom)
-                                }
+                    }
+                    .onChange(of: downloadManager.downloadLogs.count) {
+                        if let lastIndex = downloadManager.downloadLogs.indices.last {
+                            withAnimation(.easeInOut(duration: 0.25)) {
+                                proxy.scrollTo(lastIndex, anchor: .bottom)
                             }
                         }
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -263,25 +258,41 @@ struct ContentView: View {
                     downloadManager.cancelDownload()
                 }
                 .keyboardShortcut(.escape)
-                .controlSize(.large)
+                .controlSize(.regular)
+                .buttonStyle(.plain)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color(NSColor.windowBackgroundColor))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color.accentColor.opacity(0.35), lineWidth: 1)
+                )
             } else {
                 Button("Download") {
                     startDownload()
                 }
                 .disabled(url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .keyboardShortcut(.return)
-                .controlSize(.large)
-                .buttonStyle(.borderedProminent)
+                .controlSize(.regular)
+                .buttonStyle(.plain)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 13)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.accentColor)
+                )
+                .foregroundColor(.white)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color.accentColor.opacity(0.8), lineWidth: 1)
+                )
             }
-            
+
             Spacer()
-            
-            if settings.audioOnly {
-                Label("Audio Only", systemImage: "music.note")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            
+
             if !settings.outputPath.isEmpty && settings.outputPath != "~/Downloads" {
                 Label(URL(fileURLWithPath: settings.outputPath).lastPathComponent, systemImage: "folder")
                     .font(.caption)
