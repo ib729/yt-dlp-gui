@@ -393,6 +393,98 @@ class DownloadManager: ObservableObject {
             return "aac"
         }
     }
+
+    private func finalOutputPath(for path: String, desiredExtension: String? = nil) -> String {
+        let inputURL = URL(fileURLWithPath: path)
+        var baseName = inputURL.deletingPathExtension().lastPathComponent
+        if baseName.hasSuffix("_temp") {
+            baseName = String(baseName.dropLast(5))
+        }
+
+        let resolvedExtension: String
+        if let desiredExtension, !desiredExtension.isEmpty, desiredExtension != "best" {
+            resolvedExtension = desiredExtension
+        } else {
+            resolvedExtension = inputURL.pathExtension
+        }
+
+        let directoryURL = inputURL.deletingLastPathComponent()
+        let finalURL = directoryURL
+            .appendingPathComponent(baseName)
+            .appendingPathExtension(resolvedExtension)
+
+        return finalURL.path
+    }
+
+    private func renameTempFileIfNeeded(at path: String) -> String {
+        let url = URL(fileURLWithPath: path)
+        let directoryURL = url.deletingLastPathComponent()
+        let baseName = url.deletingPathExtension().lastPathComponent
+        let tempStem = baseName
+
+        let finalPath = finalOutputPath(for: path)
+        guard finalPath != path else {
+            return path
+        }
+
+        do {
+            if FileManager.default.fileExists(atPath: finalPath) {
+                try FileManager.default.removeItem(atPath: finalPath)
+            }
+            try FileManager.default.moveItem(atPath: path, toPath: finalPath)
+            addLog("Renamed temporary file to final name: \(finalPath)")
+
+            cleanupAssociatedTempFiles(finalPath: finalPath, originalTempStem: tempStem, directory: directoryURL)
+
+            return finalPath
+        } catch {
+            addLog("Failed to rename temporary file: \(error)")
+            return path
+        }
+    }
+
+    private func cleanupAssociatedTempFiles(finalPath: String, originalTempStem: String? = nil, directory: URL? = nil) {
+        let finalURL = URL(fileURLWithPath: finalPath)
+        let directoryURL = directory ?? finalURL.deletingLastPathComponent()
+        let finalStem = finalURL.deletingPathExtension().lastPathComponent
+        let tempStem = originalTempStem ?? "\(finalStem)_temp"
+
+        renameAssociatedTempFiles(tempStem: tempStem, finalStem: finalStem, directory: directoryURL)
+    }
+
+    private func renameAssociatedTempFiles(tempStem: String, finalStem: String, directory: URL) {
+        let fileManager = FileManager.default
+        guard let items = try? fileManager.contentsOfDirectory(atPath: directory.path) else {
+            return
+        }
+
+        for name in items {
+            guard name.hasPrefix(tempStem) else { continue }
+
+            let suffixIndex = name.index(name.startIndex, offsetBy: tempStem.count)
+            let suffix = name[suffixIndex...]
+            let candidateName = finalStem + suffix
+
+            let sanitizedName = candidateName.replacingOccurrences(of: "_temp.", with: ".")
+
+            guard sanitizedName != name else { continue }
+
+            let oldPath = directory.appendingPathComponent(name).path
+            let newPath = directory.appendingPathComponent(sanitizedName).path
+
+            if fileManager.fileExists(atPath: oldPath) {
+                do {
+                    if fileManager.fileExists(atPath: newPath) {
+                        try fileManager.removeItem(atPath: newPath)
+                    }
+                    try fileManager.moveItem(atPath: oldPath, toPath: newPath)
+                    addLog("Renamed associated temp file: \(sanitizedName)")
+                } catch {
+                    addLog("Failed to rename associated temp file \(name): \(error)")
+                }
+            }
+        }
+    }
     
     private func needsPostProcessing(_ settings: YtDlpSettings) -> Bool {
         return settings.format != "best" ||
@@ -421,9 +513,8 @@ class DownloadManager: ObservableObject {
             return
         }
         
-        let inputURL = URL(fileURLWithPath: inputPath)
-        let outputPath = inputURL.deletingPathExtension()
-            .appendingPathExtension(settings.format).path
+        let targetExtension = settings.format == "best" ? nil : settings.format
+        let outputPath = finalOutputPath(for: inputPath, desiredExtension: targetExtension)
         
         // Get media information
         let mediaInfo = getMediaInfo(filePath: inputPath)
@@ -503,6 +594,8 @@ class DownloadManager: ObservableObject {
             DispatchQueue.main.async {
                 if remuxProcess.terminationStatus == 0 {
                     self.addLog("✅ Remux completed: \(outputPath)")
+                    self.downloadedFilePath = outputPath
+                    self.cleanupAssociatedTempFiles(finalPath: outputPath)
                     self.statusMessage = "Remuxing completed successfully!"
                     self.progress = 1.0
                     
@@ -629,6 +722,8 @@ class DownloadManager: ObservableObject {
             DispatchQueue.main.async {
                 if conversionProcess.terminationStatus == 0 {
                     self.addLog("✅ Conversion completed: \(outputPath)")
+                    self.downloadedFilePath = outputPath
+                    self.cleanupAssociatedTempFiles(finalPath: outputPath)
                     self.statusMessage = "Conversion completed successfully!"
                     self.progress = 1.0
                     
@@ -744,6 +839,10 @@ class DownloadManager: ObservableObject {
                     if self.needsConversion && !self.downloadedFilePath.isEmpty {
                         self.processVideo(inputPath: self.downloadedFilePath, settings: effectiveSettings)
                     } else {
+                        if !self.downloadedFilePath.isEmpty {
+                            let finalPath = self.renameTempFileIfNeeded(at: self.downloadedFilePath)
+                            self.downloadedFilePath = finalPath
+                        }
                         DispatchQueue.main.async {
                             self.statusMessage = "Download completed successfully!"
                             self.progress = 1.0
@@ -787,12 +886,17 @@ class DownloadManager: ObservableObject {
                 addLog("Raw output: \(trimmedLine)")
             }
             
-            if !trimmedLine.hasPrefix("[") && trimmedLine.contains("/") &&
-               (trimmedLine.hasSuffix(".mp4") || trimmedLine.hasSuffix(".mkv") ||
-                trimmedLine.hasSuffix(".webm") || trimmedLine.hasSuffix(".avi") ||
-                trimmedLine.hasSuffix(".m4a") || trimmedLine.hasSuffix(".mp3")) {
-                downloadedFilePath = trimmedLine
-                addLog("Downloaded file: \(trimmedLine)")
+            if !trimmedLine.hasPrefix("[") && trimmedLine.contains("/") {
+                let lowercasedLine = trimmedLine.lowercased()
+                let knownExtensions = [
+                    "mp4", "mkv", "webm", "avi", "m4a", "mp3",
+                    "flac", "wav", "opus", "ogg", "aac"
+                ]
+
+                if knownExtensions.contains(where: { lowercasedLine.hasSuffix(".\($0)") }) {
+                    downloadedFilePath = trimmedLine
+                    addLog("Downloaded file: \(trimmedLine)")
+                }
             }
             
             if trimmedLine.hasPrefix("[download]") {
