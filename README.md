@@ -11,7 +11,7 @@ A native SwiftUI interface for yt-dlp.
 Coming soon...
 
 ## Installation
-Download .dmg from releases
+Download .dmg from releases (yt-dlp and ffmpeg needs to be installed already)
 
 ## Usage
 Coming soon...
