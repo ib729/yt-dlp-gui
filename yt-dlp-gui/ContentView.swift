@@ -49,6 +49,32 @@ struct ContentView: View {
         .background(Color(NSColor.windowBackgroundColor))
     }
     
+    private var mainContent: some View {
+        HStack(alignment: .top, spacing: 24) {
+            VStack(alignment: .leading, spacing: 20) {
+                urlInputSection
+                statusMessageView
+                progressSection
+                controlsSection
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: 360, alignment: .leading)
+            
+            Divider()
+                .padding(.vertical, -16)
+            
+            VStack(alignment: .leading, spacing: 16) {
+                logsSection
+                rawOutputSection
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color(NSColor.controlBackgroundColor))
+    }
+    
     private var urlInputSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Video/Playlist URL")
@@ -58,60 +84,116 @@ struct ContentView: View {
             TextField("Enter video or playlist URL...", text: $url)
                 .textFieldStyle(.roundedBorder)
                 .font(.system(.body, design: .monospaced))
+                .textContentType(.URL)
+                .disableAutocorrection(true)
+                .submitLabel(.go)
+                .help("Accepts full video or playlist links from YouTube or any yt-dlp supported site.")
                 .onSubmit {
                     if !url.isEmpty && !downloadManager.isDownloading {
                         startDownload()
                     }
                 }
+
+            Text("Supports playlists, shortened URLs, and authenticated sessions via Settings → Cookies.")
+                .font(.footnote)
+                .foregroundColor(.secondary)
         }
     }
     
-    private var statusSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if downloadManager.isDownloading {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Progress")
-                            .font(.headline)
-                        
-                        Spacer()
-                        
-                        if !downloadManager.downloadSpeed.isEmpty {
-                            Text(downloadManager.downloadSpeed)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        if !downloadManager.eta.isEmpty {
-                            Text(downloadManager.eta)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
+    @ViewBuilder
+    private var statusMessageView: some View {
+        if !downloadManager.statusMessage.isEmpty {
+            Text(downloadManager.statusMessage)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .padding(.vertical, 10)
+                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color(NSColor.windowBackgroundColor))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color(NSColor.separatorColor).opacity(0.25), lineWidth: 1)
+                )
+        }
+    }
+
+    @ViewBuilder
+    private var progressSection: some View {
+        if downloadManager.isDownloading {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 12) {
+                    Text("Download Progress")
+                        .font(.headline)
+
+                    Spacer()
+
+                    if !downloadManager.downloadSpeed.isEmpty {
+                        Label(downloadManager.downloadSpeed, systemImage: "speedometer")
+                            .labelStyle(TitleAndIconLabelStyle())
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
-                    
-                    ProgressView(value: downloadManager.progress)
-                        .progressViewStyle(LinearProgressViewStyle())
-                    
-                    Text("\(Int(downloadManager.progress * 100))%")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+
+                    if !downloadManager.eta.isEmpty {
+                        Label(downloadManager.eta, systemImage: "clock")
+                            .labelStyle(TitleAndIconLabelStyle())
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
+
+                ProgressView(value: downloadManager.progress)
+                    .progressViewStyle(.linear)
+
+                Text("\(Int(downloadManager.progress * 100))% complete")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
-            
-            if !downloadManager.downloadLogs.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Logs")
-                            .font(.headline)
-                        
-                        Spacer()
-                        
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(NSColor.windowBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color(NSColor.separatorColor).opacity(0.25), lineWidth: 1)
+            )
+        } else if downloadManager.downloadLogs.isEmpty {
+            Text("Drop a link above to start a download.")
+                .font(.footnote)
+                .foregroundColor(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var logsSection: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Session Activity")
+                        .font(.headline)
+
+                    Spacer()
+
+                    if !downloadManager.downloadLogs.isEmpty {
                         Button("Clear") {
                             downloadManager.clearLogs()
                         }
                         .controlSize(.small)
                     }
-                    
+                }
+
+                if downloadManager.downloadLogs.isEmpty {
+                    Text("Logs will appear here once a download starts.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 20)
+                } else {
                     ScrollView {
                         ScrollViewReader { proxy in
                             VStack(alignment: .leading, spacing: 2) {
@@ -126,43 +208,36 @@ struct ContentView: View {
                             }
                             .onChange(of: downloadManager.downloadLogs.count) {
                                 if let lastIndex = downloadManager.downloadLogs.indices.last {
-                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                    withAnimation(.easeInOut(duration: 0.25)) {
                                         proxy.scrollTo(lastIndex, anchor: .bottom)
                                     }
                                 }
                             }
                         }
                     }
-                    .frame(maxHeight: 200)
-                    .padding(8)
-                    .background(Color(NSColor.textBackgroundColor))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color(NSColor.separatorColor), lineWidth: 1)
-                    )
+                    .frame(maxHeight: 220)
                 }
             }
-            
-            if settings.showRawOutput && !downloadManager.rawOutput.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Raw Output")
-                        .font(.headline)
-                    
-                    ScrollView {
-                        Text(downloadManager.rawOutput)
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundColor(.secondary)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(maxHeight: 150)
-                    .padding(8)
-                    .background(Color(NSColor.textBackgroundColor))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color(NSColor.separatorColor), lineWidth: 1)
-                    )
+        } label: {
+            Label("Session Log", systemImage: "list.bullet.rectangle")
+        }
+    }
+
+    @ViewBuilder
+    private var rawOutputSection: some View {
+        if settings.showRawOutput && !downloadManager.rawOutput.isEmpty {
+            GroupBox {
+                ScrollView {
+                    Text(downloadManager.rawOutput)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundColor(.secondary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.bottom, 2)
                 }
+                .frame(maxHeight: 200)
+            } label: {
+                Label("Raw Output", systemImage: "chevron.left.slash.chevron.right")
             }
         }
     }
@@ -217,7 +292,7 @@ struct ContentView: View {
         } else if ffmpegPath.isEmpty {
             downloadManager.statusMessage = "⚠️ ffmpeg not found. Install it with: brew install ffmpeg"
         } else {
-            downloadManager.statusMessage = "✅ Ready to download"
+            downloadManager.statusMessage = "Ready to download"
         }
     }
 }
