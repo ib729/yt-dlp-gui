@@ -1,8 +1,9 @@
 DerivedData/
 build/
 *.xcuserstate
-*.xcuserdata/
 *.xcscmblueprint
+*.xcworkspace
+*.xcuserdata/
 /.build/
 /Packages
 Package.resolved

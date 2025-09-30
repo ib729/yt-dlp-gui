@@ -12,14 +12,7 @@ struct ContentView: View {
             
             Divider()
             
-            VStack(spacing: 24) {
-                urlInputSection
-                statusSection
-                controlsSection
-            }
-            .padding(24)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(NSColor.controlBackgroundColor))
+            mainContent
         }
         .frame(minWidth: 700, minHeight: 500)
         .sheet(isPresented: $showSettings) {
