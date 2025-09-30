@@ -208,7 +208,7 @@ class DownloadManager: ObservableObject {
         } else {
             args.append("\(expandedPath)/%(title)s.%(ext)s")
         }
-        
+
         let ffmpegPath = settings.customFfmpegPath.isEmpty ? findFfmpegPath() : expandPath(settings.customFfmpegPath)
         if !ffmpegPath.isEmpty {
             args.append("--ffmpeg-location")
@@ -222,7 +222,11 @@ class DownloadManager: ObservableObject {
             args.append("--verbose")
         }
         
-        if settings.audioOnly {
+        if settings.subtitleOnly {
+            args.append("--skip-download")
+        }
+
+        if settings.audioOnly && !settings.subtitleOnly {
             args.append("--extract-audio")
             
             let audioFormat = mapAudioFormat(settings.audioFormat)
@@ -236,7 +240,7 @@ class DownloadManager: ObservableObject {
             if settings.keepVideo {
                 args.append("--keep-video")
             }
-        } else {
+        } else if !settings.subtitleOnly {
             if settings.videoCodec == "auto" {
                 if settings.quality != "best" {
                     args.append("--format")
@@ -264,19 +268,23 @@ class DownloadManager: ObservableObject {
         // Subtitles
         if settings.downloadSubtitles {
             args.append("--write-subs")
-            if !settings.subtitleLanguage.isEmpty {
+            let trimmedSubtitleLang = settings.subtitleLanguage.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedSubtitleLang.isEmpty {
                 args.append("--sub-langs")
-                args.append(settings.subtitleLanguage)
+                args.append(trimmedSubtitleLang)
+            } else if settings.writeAutoSubs {
+                args.append("--sub-langs")
+                args.append("all")
             }
             args.append("--sub-format")
             args.append(settings.subtitleFormat)
             
-            if settings.embedSubs && !settings.audioOnly && !needsConversion {
+            if settings.embedSubs && !settings.audioOnly && !needsConversion && !settings.subtitleOnly {
                 args.append("--embed-subs")
             }
         }
-        
-        if settings.writeAutoSubs {
+
+        if settings.downloadSubtitles && settings.writeAutoSubs {
             args.append("--write-auto-subs")
         }
         
@@ -485,6 +493,25 @@ class DownloadManager: ObservableObject {
             }
         }
     }
+
+    private func cleanupSidecarFiles(for outputPath: String) {
+        let baseURL = URL(fileURLWithPath: outputPath).deletingPathExtension()
+        let descriptionURL = baseURL.appendingPathExtension("description")
+
+        guard FileManager.default.fileExists(atPath: descriptionURL.path) else { return }
+
+        do {
+            let data = try Data(contentsOf: descriptionURL)
+            let contents = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if contents.isEmpty {
+                try FileManager.default.removeItem(at: descriptionURL)
+                addLog("Removed empty description file: \(descriptionURL.path)")
+            }
+        } catch {
+            addLog("Failed to inspect description file: \(error)")
+        }
+    }
     
     private func needsPostProcessing(_ settings: YtDlpSettings) -> Bool {
         return settings.format != "best" ||
@@ -596,6 +623,7 @@ class DownloadManager: ObservableObject {
                     self.addLog("✅ Remux completed: \(outputPath)")
                     self.downloadedFilePath = outputPath
                     self.cleanupAssociatedTempFiles(finalPath: outputPath)
+                    self.cleanupSidecarFiles(for: outputPath)
                     self.statusMessage = "Remuxing completed successfully!"
                     self.progress = 1.0
                     
@@ -724,6 +752,7 @@ class DownloadManager: ObservableObject {
                     self.addLog("✅ Conversion completed: \(outputPath)")
                     self.downloadedFilePath = outputPath
                     self.cleanupAssociatedTempFiles(finalPath: outputPath)
+                    self.cleanupSidecarFiles(for: outputPath)
                     self.statusMessage = "Conversion completed successfully!"
                     self.progress = 1.0
                     
@@ -842,6 +871,7 @@ class DownloadManager: ObservableObject {
                         if !self.downloadedFilePath.isEmpty {
                             let finalPath = self.renameTempFileIfNeeded(at: self.downloadedFilePath)
                             self.downloadedFilePath = finalPath
+                            self.cleanupSidecarFiles(for: finalPath)
                         }
                         DispatchQueue.main.async {
                             self.statusMessage = "Download completed successfully!"

@@ -8,7 +8,7 @@ struct SettingsView: View {
     
     var body: some View {
         NavigationView {
-            ScrollView {
+            ScrollView(showsIndicators: false) {
                 VStack(spacing: 24) {
                     generalSection
                     videoSection
@@ -146,7 +146,7 @@ struct SettingsView: View {
                     Text("AVI").tag("avi")
                 }
                 .pickerStyle(.menu)
-                .disabled(settings.audioOnly)
+                .disabled(settings.audioOnly || settings.subtitleOnly)
             }
             
             settingsField(label: "Resolution Cap") {
@@ -160,7 +160,7 @@ struct SettingsView: View {
                     Text("360p").tag("height<=360")
                 }
                 .pickerStyle(.menu)
-                .disabled(settings.audioOnly)
+                .disabled(settings.audioOnly || settings.subtitleOnly)
             }
             
             settingsField(label: "Preferred Codec") {
@@ -172,7 +172,7 @@ struct SettingsView: View {
                     Text("AV1").tag("av01")
                 }
                 .pickerStyle(.menu)
-                .disabled(settings.audioOnly)
+                .disabled(settings.audioOnly || settings.subtitleOnly)
             }
         }
     }
@@ -182,6 +182,7 @@ struct SettingsView: View {
             Toggle("Audio Only", isOn: $settings.audioOnly)
                 .toggleStyle(.switch)
                 .padding(.vertical, 4)
+                .disabled(settings.subtitleOnly)
             
             settingsField(label: "Audio Format") {
                 Picker("Audio Format", selection: $settings.audioFormat) {
@@ -194,6 +195,7 @@ struct SettingsView: View {
                     Text("WAV").tag("wav")
                 }
                 .pickerStyle(.menu)
+                .disabled(settings.subtitleOnly)
             }
             
             settingsField(label: "Bitrate") {
@@ -206,25 +208,30 @@ struct SettingsView: View {
                     Text("64 kbps").tag("64")
                 }
                 .pickerStyle(.menu)
+                .disabled(settings.subtitleOnly)
             }
             
             if settings.audioOnly {
                 Toggle("Keep video file after extraction", isOn: $settings.keepVideo)
+                    .disabled(settings.subtitleOnly)
             }
         }
     }
     
     private var postProcessingSection: some View {
         settingsGroup(title: "Post-Processing", systemImage: "wand.and.stars") {
-            Toggle("Force conversion", isOn: $settings.forceConversion)
-            
-            if !settings.audioOnly {
-                Toggle("Delete original after conversion", isOn: $settings.deleteOriginal)
+            Group {
+                Toggle("Force conversion", isOn: $settings.forceConversion)
+                
+                if !settings.audioOnly {
+                    Toggle("Delete original after conversion", isOn: $settings.deleteOriginal)
+                }
+                
+                Text("Forcing conversion re-encodes media even when the source matches your target format.")
+                    .font(.footnote)
+                    .foregroundColor(.secondary.opacity(settings.subtitleOnly ? 0.6 : 1))
             }
-            
-            Text("Forcing conversion re-encodes media even when the source matches your target format.")
-                .font(.footnote)
-                .foregroundColor(.secondary)
+            .disabled(settings.subtitleOnly)
         }
     }
     
@@ -233,7 +240,13 @@ struct SettingsView: View {
             Toggle("Download subtitles", isOn: $settings.downloadSubtitles)
                 .toggleStyle(.switch)
                 .padding(.bottom, settings.downloadSubtitles ? 8 : 0)
-            
+                .onChange(of: settings.downloadSubtitles) { oldValue, newValue in
+                    guard oldValue != newValue, newValue == false else { return }
+                    settings.writeAutoSubs = false
+                    settings.embedSubs = false
+                    settings.subtitleOnly = false
+                }
+
             if settings.downloadSubtitles {
                 settingsField(label: "Languages") {
                     TextField("e.g. en,es,fr", text: $settings.subtitleLanguage)
@@ -248,12 +261,23 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.segmented)
                 }
-                
+
                 if !settings.audioOnly {
                     Toggle("Embed subtitles into video", isOn: $settings.embedSubs)
+                        .disabled(settings.subtitleOnly)
                 }
-                
+
                 Toggle("Download auto-generated subtitles", isOn: $settings.writeAutoSubs)
+
+                Toggle("Subtitle only (skip media)", isOn: $settings.subtitleOnly)
+                    .toggleStyle(.switch)
+                    .onChange(of: settings.subtitleOnly) { oldValue, newValue in
+                        guard oldValue != newValue else { return }
+                        if newValue {
+                            settings.audioOnly = false
+                            settings.embedSubs = false
+                        }
+                    }
             }
         }
     }

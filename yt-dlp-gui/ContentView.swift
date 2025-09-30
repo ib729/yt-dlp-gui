@@ -109,8 +109,8 @@ struct ContentView: View {
                 .textContentType(.URL)
                 .disableAutocorrection(true)
                 .submitLabel(.go)
-                .padding(.vertical, 10)
-                .padding(.horizontal, 12)
+                .padding(.vertical, 13)
+                .padding(.horizontal, 16)
                 .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(Color(NSColor.windowBackgroundColor))
@@ -135,8 +135,8 @@ struct ContentView: View {
             Text(downloadManager.statusMessage)
                 .font(.body)
                 .foregroundColor(.secondary)
-                .padding(.vertical, 10)
-                .padding(.horizontal, 12)
+                .padding(.vertical, 13)
+                .padding(.horizontal, 16)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -254,41 +254,45 @@ struct ContentView: View {
     private var controlsSection: some View {
         HStack(spacing: 16) {
             if downloadManager.isDownloading {
-                Button("Cancel") {
-                    downloadManager.cancelDownload()
+                Button(action: downloadManager.cancelDownload) {
+                    Text("Cancel")
+                        .font(.body.weight(.semibold))
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 13)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color(NSColor.windowBackgroundColor))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(Color.accentColor.opacity(0.35), lineWidth: 1)
+                        )
                 }
                 .keyboardShortcut(.escape)
-                .controlSize(.regular)
                 .buttonStyle(.plain)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color(NSColor.windowBackgroundColor))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(Color.accentColor.opacity(0.35), lineWidth: 1)
-                )
+                .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             } else {
-                Button("Download") {
-                    startDownload()
+                let isDisabled = url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+                Button(action: startDownload) {
+                    Text("Download")
+                        .font(.body.weight(.semibold))
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 13)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(isDisabled ? Color.accentColor.opacity(0.45) : Color.accentColor)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(Color.accentColor.opacity(isDisabled ? 0.35 : 0.8), lineWidth: 1)
+                        )
+                        .foregroundColor(.white.opacity(isDisabled ? 0.8 : 1))
                 }
-                .disabled(url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(isDisabled)
                 .keyboardShortcut(.return)
-                .controlSize(.regular)
                 .buttonStyle(.plain)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 13)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.accentColor)
-                )
-                .foregroundColor(.white)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(Color.accentColor.opacity(0.8), lineWidth: 1)
-                )
+                .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
 
             Spacer()

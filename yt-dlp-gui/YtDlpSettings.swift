@@ -17,6 +17,7 @@ struct YtDlpSettings: Codable {
     var audioQuality: String = "192"
     var videoCodec: String = "auto"
     var audioCodec: String = "aac"
+    var subtitleOnly: Bool = false
     var downloadThumbnail: Bool = false
     var embedThumbnail: Bool = false
     var writeDescription: Bool = false
