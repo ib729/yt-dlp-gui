@@ -10,9 +10,8 @@
 - Customizable download options including quality, audio, subtitles, etc.
 - Download media from [thousands of sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md).
 
-## Screenshots
+## Screenshot
 <img src="stuff/yt-dlp-gui screenshot.png" height=1080 width=1920>
-<img src="stuff/yt-dlp-gui settings.gif" height=1080 width=1920>
 
 ## Installation
 - Install [yt-dlp](https://github.com/yt-dlp/yt-dlp) and [ffmpeg](https://github.com/FFmpeg/FFmpeg) first.
