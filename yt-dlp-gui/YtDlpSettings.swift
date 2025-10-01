@@ -3,14 +3,14 @@ import Foundation
 struct YtDlpSettings: Codable {
     var format: String = "best"
     var quality: String = "best"
-    var downloadSubtitles: Bool = false
+    var downloadSubtitles: Bool = true
     var subtitleLanguage: String = "en"
     var audioOnly: Bool = false
     var cookieData: String = ""
     var outputPath: String = "~/Downloads"
     var customYtdlpPath: String = ""
     var customFfmpegPath: String = ""
-    var embedSubs: Bool = false
+    var embedSubs: Bool = true
     var writeAutoSubs: Bool = false
     var subtitleFormat: String = "srt"
     var audioFormat: String = "mp3"
