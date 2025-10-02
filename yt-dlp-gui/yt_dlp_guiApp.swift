@@ -9,7 +9,6 @@ struct yt_dlp_guiApp: App {
         .windowStyle(.hiddenTitleBar)
         .windowToolbarStyle(.unified)
         .defaultSize(width: 1100, height: 720)
-        .defaultMinimumSize(width: 900, height: 620)
         .commands {
             CommandGroup(replacing: .appSettings) {
                 Button("Preferences...") {
