@@ -17,6 +17,8 @@
 
 ## Installation
 
+### Download via DMG
+
 - Install [yt-dlp](https://github.com/yt-dlp/yt-dlp) and [ffmpeg](https://github.com/FFmpeg/FFmpeg) first.
 - Download the .dmg from Releases and drag yt-dlp-gui.app into /Applications.
 - Right-click the app, choose Open, then confirm to bypass Gatekeeper.
@@ -25,6 +27,16 @@ If Gatekeeper still blocks the app:
 
 ```
 xattr -r -d com.apple.quarantine /Applications/yt-dlp-gui.app
+```
+
+### Download via Homebrew
+
+```
+brew tap ib729/yt-dlp-gui
+```
+
+```
+brew install --cask yt-dlp-gui
 ```
 
 ## Usage
@@ -42,7 +54,6 @@ xattr -r -d com.apple.quarantine /Applications/yt-dlp-gui.app
 - [ffmpeg](https://github.com/FFmpeg/FFmpeg)
 - [Swift](https://github.com/swiftlang/swift)
 - [SF Symbols](https://developer.apple.com/sf-symbols/)
-
 
 ## License
 
