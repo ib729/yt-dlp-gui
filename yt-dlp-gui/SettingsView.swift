@@ -5,6 +5,16 @@ struct SettingsView: View {
     @Binding var settings: YtDlpSettings
     @Environment(\.presentationMode) var presentationMode
     @StateObject private var downloadManager = DownloadManager()
+    private let browserCookieOptions: [(label: String, value: String)] = [
+        ("Safari", "safari"),
+        ("Brave", "brave"),
+        ("Google Chrome", "chrome"),
+        ("Chromium", "chromium"),
+        ("Microsoft Edge", "edge"),
+        ("Firefox", "firefox"),
+        ("Opera", "opera"),
+        ("Vivaldi", "vivaldi")
+    ]
     
     var body: some View {
         NavigationView {
@@ -343,6 +353,31 @@ struct SettingsView: View {
     
     private var authenticationSection: some View {
         settingsGroup(title: "Authentication", systemImage: "lock") {
+            Toggle("Pass cookies through browser", isOn: $settings.useBrowserCookies)
+                .toggleStyle(.switch)
+                .help("Supported browsers: Safari, Brave, Google Chrome, Chromium, Microsoft Edge, Firefox, Opera, Vivaldi.")
+
+            if settings.useBrowserCookies {
+                Text("Manual cookie input is disabled while pass-through is active.")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
+
+            if settings.useBrowserCookies {
+                settingsField(label: "Browser", footer: "yt-dlp will read cookies directly from the selected browser. Close the browser first for best results.") {
+                    Picker("Browser", selection: $settings.browserCookieSource) {
+                        ForEach(browserCookieOptions, id: \.value) { option in
+                            Text(option.label).tag(option.value)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+            }
+
+            if settings.useBrowserCookies {
+                Divider()
+            }
+
             Text("Cookies (Netscape format)")
                 .font(.subheadline)
                 .fontWeight(.semibold)
@@ -355,11 +390,13 @@ struct SettingsView: View {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
                 )
+                .disabled(settings.useBrowserCookies)
             
             if settings.cookieData.isEmpty {
                 Text("Paste browser cookies exported in Netscape format.\nExample:\n# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t…")
                     .font(.footnote)
                     .foregroundColor(.secondary)
+                    .disabled(settings.useBrowserCookies)
             } else {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
@@ -375,6 +412,7 @@ struct SettingsView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(.red)
                 }
+                .disabled(settings.useBrowserCookies)
             }
         }
     }

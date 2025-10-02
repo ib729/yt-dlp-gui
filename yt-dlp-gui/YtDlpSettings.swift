@@ -37,6 +37,9 @@ struct YtDlpSettings: Codable {
     var showRawOutput: Bool = false
     var logCommands: Bool = true
     
+    var useBrowserCookies: Bool = false
+    var browserCookieSource: String = "safari"
+    
     func save() {
         if let encoded = try? JSONEncoder().encode(self) {
             UserDefaults.standard.set(encoded, forKey: "YtDlpSettings")

@@ -387,6 +387,12 @@ class DownloadManager: ObservableObject {
         }
         
         // Cookies
+        if settings.useBrowserCookies {
+            addLog("Using cookies from browser: \(settings.browserCookieSource)")
+            args.append("--cookies-from-browser")
+            args.append(settings.browserCookieSource)
+        }
+
         if !settings.cookieData.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let tempDir = FileManager.default.temporaryDirectory
             let cookieFileURL = tempDir.appendingPathComponent("cookies_\(UUID().uuidString).txt")
