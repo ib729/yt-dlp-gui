@@ -15,6 +15,9 @@
 
 <img src="stuff/yt-dlp-gui screenshot.png" height=1080 width=1920>
 
+## System Requirements
+**macOS**: 14 or later 
+
 ## Installation
 ### Download via DMG
 
@@ -55,4 +58,4 @@ Coming soon...
 
 ## License
 
-Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
