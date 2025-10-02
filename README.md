@@ -16,7 +16,6 @@
 <img src="stuff/yt-dlp-gui screenshot.png" height=1080 width=1920>
 
 ## Installation
-
 ### Download via DMG
 
 - Install [yt-dlp](https://github.com/yt-dlp/yt-dlp) and [ffmpeg](https://github.com/FFmpeg/FFmpeg) first.
@@ -33,11 +32,10 @@ xattr -r -d com.apple.quarantine /Applications/yt-dlp-gui.app
 
 ```
 brew tap ib729/yt-dlp-gui
-```
-
-```
 brew install --cask yt-dlp-gui
 ```
+### Download via Script
+Coming soon...
 
 ## Usage
 
@@ -51,7 +49,7 @@ brew install --cask yt-dlp-gui
 - [Ivan Belousov](https://github.com/ib729)
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp)
 - [youtube-dl](https://github.com/ytdl-org/youtube-dl)
-- [ffmpeg](https://github.com/FFmpeg/FFmpeg)
+- [FFmpeg](https://github.com/FFmpeg/FFmpeg)
 - [Swift](https://github.com/swiftlang/swift)
 - [SF Symbols](https://developer.apple.com/sf-symbols/)
 
