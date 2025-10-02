@@ -162,17 +162,18 @@ struct SettingsView: View {
                 .pickerStyle(.menu)
                 .disabled(settings.audioOnly || settings.subtitleOnly)
             }
-            
+
             settingsField(label: "Preferred Codec") {
                 Picker("Video Codec", selection: $settings.videoCodec) {
                     Text("Auto").tag("auto")
                     Text("H.264").tag("h264")
                     Text("H.265 (HEVC)").tag("h265")
                     Text("VP9").tag("vp9")
-                    Text("AV1").tag("av01")
+                    Text("AV1 (SVT-AV1)").tag("av01")
                 }
                 .pickerStyle(.menu)
                 .disabled(settings.audioOnly || settings.subtitleOnly)
+                .help("Prefers libsvtav1 when available, falling back to libaom-av1.")
             }
         }
     }

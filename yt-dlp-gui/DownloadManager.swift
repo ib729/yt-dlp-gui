@@ -14,6 +14,7 @@ class DownloadManager: ObservableObject {
     private var settings: YtDlpSettings?
     private var needsConversion = false
     private var downloadedFilePath = ""
+    private var ffmpegEncoderCache: [String: Set<String>] = [:]
     
     func findYTdlpPath() -> String {
         let whichProcess = Process()
@@ -94,6 +95,53 @@ class DownloadManager: ObservableObject {
         
         addLog("ffmpeg not found in any standard location")
         return ""
+    }
+
+    private func availableEncoders(for ffmpegPath: String) -> Set<String> {
+        let canonicalPath = URL(fileURLWithPath: ffmpegPath).standardizedFileURL.path
+        if let cached = ffmpegEncoderCache[canonicalPath] {
+            return cached
+        }
+
+        let encoderProcess = Process()
+        encoderProcess.executableURL = URL(fileURLWithPath: canonicalPath)
+        encoderProcess.arguments = ["-hide_banner", "-encoders"]
+
+        let outputPipe = Pipe()
+        encoderProcess.standardOutput = outputPipe
+        encoderProcess.standardError = Pipe()
+
+        do {
+            try encoderProcess.run()
+            encoderProcess.waitUntilExit()
+        } catch {
+            addLog("Failed to query ffmpeg encoders: \(error)")
+            ffmpegEncoderCache[canonicalPath] = []
+            return []
+        }
+
+        let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        guard let output = String(data: data, encoding: .utf8) else {
+            ffmpegEncoderCache[canonicalPath] = []
+            return []
+        }
+
+        let encoders = output.split(separator: "\n").reduce(into: Set<String>()) { result, line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { return }
+
+            let tokens = trimmed.split(whereSeparator: { $0.isWhitespace })
+            if tokens.count >= 2 {
+                result.insert(String(tokens[1]))
+            }
+        }
+
+        ffmpegEncoderCache[canonicalPath] = encoders
+        return encoders
+    }
+
+    private func ffmpegSupportsEncoder(_ encoder: String, ffmpegPath: String) -> Bool {
+        return availableEncoders(for: ffmpegPath).contains(encoder)
     }
     
     private func expandPath(_ path: String) -> String {
@@ -689,12 +737,19 @@ class DownloadManager: ObservableObject {
             case "vp9":
                 args.append(contentsOf: ["-c:v", "libvpx-vp9"])
             case "av01":
-                args.append(contentsOf: ["-c:v", "libaom-av1"])
+                if ffmpegSupportsEncoder("libsvtav1", ffmpegPath: ffmpegPath) {
+                    args.append(contentsOf: ["-c:v", "libsvtav1"])
+                    args.append(contentsOf: ["-preset", "6"])
+                    addLog("Using libsvtav1 encoder for AV1 re-encode (preset 6)")
+                } else {
+                    addLog("libsvtav1 encoder not available - falling back to libaom-av1")
+                    args.append(contentsOf: ["-c:v", "libaom-av1"])
+                }
             default:
                 args.append(contentsOf: ["-c:v", "libx264"])
             }
         }
-        
+
         // Audio codec selection
         switch settings.audioCodec {
         case "aac":
