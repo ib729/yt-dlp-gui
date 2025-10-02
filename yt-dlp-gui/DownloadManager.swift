@@ -308,7 +308,7 @@ class DownloadManager: ObservableObject {
                 
                 if settings.format != "best" || settings.videoCodec != "auto" || settings.forceConversion {
                     needsConversion = true
-                    addLog("Will process to \(settings.format) after download")
+                    addLog("Will verify downloaded media against requested format/codec")
                 }
             }
         }
@@ -499,6 +499,20 @@ class DownloadManager: ObservableObject {
         }
     }
 
+    private func completeDownloadWithoutFurtherProcessing(at path: String) {
+        if !path.isEmpty {
+            let finalPath = renameTempFileIfNeeded(at: path)
+            downloadedFilePath = finalPath
+            cleanupSidecarFiles(for: finalPath)
+        }
+
+        DispatchQueue.main.async {
+            self.statusMessage = "Download completed successfully!"
+            self.progress = 1.0
+            self.isDownloading = false
+        }
+    }
+
     private func cleanupAssociatedTempFiles(finalPath: String, originalTempStem: String? = nil, directory: URL? = nil) {
         let finalURL = URL(fileURLWithPath: finalPath)
         let directoryURL = directory ?? finalURL.deletingLastPathComponent()
@@ -568,7 +582,54 @@ class DownloadManager: ObservableObject {
                (settings.embedSubs && settings.downloadSubtitles) ||
                settings.embedThumbnail
     }
-    
+
+    private func canonicalVideoCodecName(_ codec: String) -> String {
+        let lowercased = codec.lowercased()
+
+        if lowercased.hasPrefix("avc") || lowercased == "h264" {
+            return "h264"
+        }
+        if lowercased == "hevc" || lowercased == "h265" || lowercased.hasPrefix("hev") {
+            return "h265"
+        }
+        if lowercased.hasPrefix("vp09") || lowercased == "vp9" {
+            return "vp9"
+        }
+        if lowercased.hasPrefix("av01") || lowercased == "av1" {
+            return "av1"
+        }
+        if lowercased.hasPrefix("vp8") {
+            return "vp8"
+        }
+
+        return lowercased
+    }
+
+    private func requestedVideoCodecValue(for codecSetting: String) -> String? {
+        switch codecSetting {
+        case "auto":
+            return nil
+        case "h264":
+            return "h264"
+        case "h265":
+            return "h265"
+        case "vp9":
+            return "vp9"
+        case "av01":
+            return "av1"
+        default:
+            return codecSetting.lowercased()
+        }
+    }
+
+    private func videoCodecMatchesRequest(actualCodec: String, requestedSetting: String) -> Bool {
+        guard let requested = requestedVideoCodecValue(for: requestedSetting) else {
+            return true
+        }
+
+        return canonicalVideoCodecName(actualCodec) == requested
+    }
+
     private func extractHeight(from quality: String) -> String {
         if quality.contains("<=") {
             return quality.replacingOccurrences(of: "height<=", with: "")
@@ -593,20 +654,41 @@ class DownloadManager: ObservableObject {
         
         // Get media information
         let mediaInfo = getMediaInfo(filePath: inputPath)
-        let canRemuxDirectly = canRemux(
-            from: mediaInfo.container,
-            to: settings.format,
-            videoCodec: mediaInfo.videoCodec,
-            audioCodec: mediaInfo.audioCodec
-        ) && settings.videoCodec == "auto"
-        
+        let requestedCodecMatches = videoCodecMatchesRequest(actualCodec: mediaInfo.videoCodec, requestedSetting: settings.videoCodec)
+        let targetFormat = settings.format.lowercased()
+        let sourceContainer = mediaInfo.container.lowercased()
+        let containerMatches = targetFormat == "best" || targetFormat == sourceContainer
+
+        if requestedCodecMatches && containerMatches && !settings.forceConversion {
+            addLog("✅ Requested codec already present - skipping additional processing")
+            completeDownloadWithoutFurtherProcessing(at: inputPath)
+            return
+        }
+
+        let canRemuxDirectly = requestedCodecMatches &&
+            targetFormat != "best" &&
+            canRemux(
+                from: mediaInfo.container,
+                to: settings.format,
+                videoCodec: mediaInfo.videoCodec,
+                audioCodec: mediaInfo.audioCodec
+            )
+
         if canRemuxDirectly && !settings.forceConversion {
             addLog("✅ Compatible formats detected - remuxing without re-encoding")
             remuxVideo(inputPath: inputPath, outputPath: outputPath, settings: settings)
-        } else {
-            addLog("⚙️ Incompatible formats or specific codec requested - re-encoding")
-            convertVideo(inputPath: inputPath, outputPath: outputPath, settings: settings)
+            return
         }
+
+        if !requestedCodecMatches {
+            addLog("⚙️ Downloaded codec \(mediaInfo.videoCodec) does not match requested \(settings.videoCodec) - re-encoding")
+        } else if settings.forceConversion {
+            addLog("⚙️ Forced conversion requested - re-encoding")
+        } else {
+            addLog("⚙️ Cannot remux from \(mediaInfo.container) to \(settings.format) without re-encoding")
+        }
+
+        convertVideo(inputPath: inputPath, outputPath: outputPath, settings: settings)
     }
     
     private func remuxVideo(inputPath: String, outputPath: String, settings: YtDlpSettings) {
@@ -923,16 +1005,7 @@ class DownloadManager: ObservableObject {
                     if self.needsConversion && !self.downloadedFilePath.isEmpty {
                         self.processVideo(inputPath: self.downloadedFilePath, settings: effectiveSettings)
                     } else {
-                        if !self.downloadedFilePath.isEmpty {
-                            let finalPath = self.renameTempFileIfNeeded(at: self.downloadedFilePath)
-                            self.downloadedFilePath = finalPath
-                            self.cleanupSidecarFiles(for: finalPath)
-                        }
-                        DispatchQueue.main.async {
-                            self.statusMessage = "Download completed successfully!"
-                            self.progress = 1.0
-                            self.isDownloading = false
-                        }
+                        self.completeDownloadWithoutFurtherProcessing(at: self.downloadedFilePath)
                     }
                 } else {
                     DispatchQueue.main.async {
