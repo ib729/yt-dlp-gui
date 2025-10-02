@@ -15,6 +15,8 @@ class DownloadManager: ObservableObject {
     private var needsConversion = false
     private var downloadedFilePath = ""
     private var ffmpegEncoderCache: [String: Set<String>] = [:]
+    private var downloadedFilesForSession: [String] = []
+    private var pendingProcessingFiles: [String] = []
     
     func findYTdlpPath() -> String {
         let whichProcess = Process()
@@ -251,11 +253,7 @@ class DownloadManager: ObservableObject {
         let expandedPath = expandPath(outputPath)
         
         args.append("-o")
-        if settings.audioOnly || needsPostProcessing(settings) {
-            args.append("\(expandedPath)/%(title)s_temp.%(ext)s")
-        } else {
-            args.append("\(expandedPath)/%(title)s.%(ext)s")
-        }
+        args.append("\(expandedPath)/%(title)s.%(ext)s")
 
         let ffmpegPath = settings.customFfmpegPath.isEmpty ? findFfmpegPath() : expandPath(settings.customFfmpegPath)
         if !ffmpegPath.isEmpty {
@@ -499,17 +497,64 @@ class DownloadManager: ObservableObject {
         }
     }
 
-    private func completeDownloadWithoutFurtherProcessing(at path: String) {
-        if !path.isEmpty {
-            let finalPath = renameTempFileIfNeeded(at: path)
-            downloadedFilePath = finalPath
-            cleanupSidecarFiles(for: finalPath)
+    private func finalizeFileWithoutProcessing(at path: String) -> String {
+        guard !path.isEmpty else {
+            return path
         }
 
+        let finalPath = renameTempFileIfNeeded(at: path)
+        cleanupSidecarFiles(for: finalPath)
+        addLog("✅ No conversion needed: \(finalPath)")
+        return finalPath
+    }
+
+    private func finalizePendingFilesWithoutProcessing(successMessage: String) {
+        var lastFinalPath = ""
+
+        for path in pendingProcessingFiles {
+            let finalPath = finalizeFileWithoutProcessing(at: path)
+            lastFinalPath = finalPath
+        }
+
+        pendingProcessingFiles.removeAll()
+        downloadedFilesForSession.removeAll()
+        downloadedFilePath = lastFinalPath
+
         DispatchQueue.main.async {
-            self.statusMessage = "Download completed successfully!"
+            self.statusMessage = successMessage
             self.progress = 1.0
             self.isDownloading = false
+        }
+    }
+
+    private func processNextPendingFile(settings: YtDlpSettings, successMessage: String) {
+        guard let path = pendingProcessingFiles.first else {
+            pendingProcessingFiles.removeAll()
+            downloadedFilesForSession.removeAll()
+            DispatchQueue.main.async {
+                self.statusMessage = successMessage
+                self.progress = 1.0
+                self.isDownloading = false
+            }
+            return
+        }
+
+        pendingProcessingFiles.removeFirst()
+
+        processDownloadedFile(at: path, settings: settings) { success, errorMessage, finalPath in
+            if success {
+                if let finalPath {
+                    self.downloadedFilePath = finalPath
+                }
+                self.processNextPendingFile(settings: settings, successMessage: successMessage)
+            } else {
+                self.pendingProcessingFiles.removeAll()
+                DispatchQueue.main.async {
+                    self.statusMessage = errorMessage ?? "Processing failed"
+                    self.progress = 0.0
+                    self.isDownloading = false
+                }
+            }
         }
     }
 
@@ -556,6 +601,18 @@ class DownloadManager: ObservableObject {
         }
     }
 
+    private func recordDownloadedFile(path: String) {
+        let normalizedPath = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedPath.isEmpty else { return }
+
+        downloadedFilePath = normalizedPath
+
+        if !downloadedFilesForSession.contains(normalizedPath) {
+            downloadedFilesForSession.append(normalizedPath)
+            addLog("Downloaded file: \(normalizedPath)")
+        }
+    }
+
     private func cleanupSidecarFiles(for outputPath: String) {
         let baseURL = URL(fileURLWithPath: outputPath).deletingPathExtension()
         let descriptionURL = baseURL.appendingPathExtension("description")
@@ -575,6 +632,34 @@ class DownloadManager: ObservableObject {
         }
     }
     
+    private func makeTemporaryPath(for path: String, suffix: String) -> String {
+        let originalURL = URL(fileURLWithPath: path)
+        let directoryURL = originalURL.deletingLastPathComponent()
+        let baseName = originalURL.deletingPathExtension().lastPathComponent
+        let extensionName = originalURL.pathExtension
+
+        func buildURL(with base: String) -> URL {
+            var url = directoryURL.appendingPathComponent(base)
+            if !extensionName.isEmpty {
+                url = url.appendingPathExtension(extensionName)
+            }
+            return url
+        }
+
+        var candidateBase = baseName + suffix
+        var candidateURL = buildURL(with: candidateBase)
+        var counter = 1
+        let fileManager = FileManager.default
+
+        while fileManager.fileExists(atPath: candidateURL.path) {
+            candidateBase = baseName + suffix + "-\(counter)"
+            candidateURL = buildURL(with: candidateBase)
+            counter += 1
+        }
+
+        return candidateURL.path
+    }
+
     private func needsPostProcessing(_ settings: YtDlpSettings) -> Bool {
         return settings.format != "best" ||
                settings.videoCodec != "auto" ||
@@ -637,15 +722,12 @@ class DownloadManager: ObservableObject {
         return quality
     }
     
-    private func processVideo(inputPath: String, settings: YtDlpSettings) {
+    private func processDownloadedFile(at inputPath: String, settings: YtDlpSettings, completion: @escaping (Bool, String?, String?) -> Void) {
         let ffmpegPath = settings.customFfmpegPath.isEmpty ? findFfmpegPath() : expandPath(settings.customFfmpegPath)
         
         guard !ffmpegPath.isEmpty && FileManager.default.fileExists(atPath: ffmpegPath) else {
             addLog("❌ Cannot process: ffmpeg not found")
-            DispatchQueue.main.async {
-                self.statusMessage = "Processing failed: ffmpeg not found"
-                self.isDownloading = false
-            }
+            completion(false, "Processing failed: ffmpeg not found", nil)
             return
         }
         
@@ -661,7 +743,8 @@ class DownloadManager: ObservableObject {
 
         if requestedCodecMatches && containerMatches && !settings.forceConversion {
             addLog("✅ Requested codec already present - skipping additional processing")
-            completeDownloadWithoutFurtherProcessing(at: inputPath)
+            let finalPath = finalizeFileWithoutProcessing(at: inputPath)
+            completion(true, nil, finalPath)
             return
         }
 
@@ -676,7 +759,7 @@ class DownloadManager: ObservableObject {
 
         if canRemuxDirectly && !settings.forceConversion {
             addLog("✅ Compatible formats detected - remuxing without re-encoding")
-            remuxVideo(inputPath: inputPath, outputPath: outputPath, settings: settings)
+            remuxVideo(inputPath: inputPath, outputPath: outputPath, settings: settings, completion: completion)
             return
         }
 
@@ -688,24 +771,27 @@ class DownloadManager: ObservableObject {
             addLog("⚙️ Cannot remux from \(mediaInfo.container) to \(settings.format) without re-encoding")
         }
 
-        convertVideo(inputPath: inputPath, outputPath: outputPath, settings: settings)
+        convertVideo(inputPath: inputPath, outputPath: outputPath, settings: settings, completion: completion)
     }
     
-    private func remuxVideo(inputPath: String, outputPath: String, settings: YtDlpSettings) {
+    private func remuxVideo(inputPath: String, outputPath: String, settings: YtDlpSettings, completion: @escaping (Bool, String?, String?) -> Void) {
         let ffmpegPath = settings.customFfmpegPath.isEmpty ? findFfmpegPath() : expandPath(settings.customFfmpegPath)
-        
+
         guard !ffmpegPath.isEmpty else {
+            completion(false, "Remux failed: ffmpeg not found", nil)
             return
         }
-        
+
         addLog("🚀 Remuxing (no re-encoding): \(inputPath) -> \(outputPath)")
-        
+
         DispatchQueue.main.async {
             self.statusMessage = "Remuxing to \(settings.format) (preserving quality)..."
-            self.progress = 0.5 // Remuxing is usually very fast
+            self.progress = max(self.progress, 0.5)
         }
-        
+
         var args = ["-i", inputPath]
+
+        let tempOutputPath = outputPath == inputPath ? makeTemporaryPath(for: outputPath, suffix: ".remux") : outputPath
         
         args.append(contentsOf: ["-c", "copy"])
         
@@ -720,9 +806,9 @@ class DownloadManager: ObservableObject {
         args.append(contentsOf: ["-map", "0"])
         
         args.append(contentsOf: ["-avoid_negative_ts", "make_zero"])
-        
+
         args.append("-y")
-        args.append(outputPath)
+        args.append(tempOutputPath)
         
         addLog("Remux command: ffmpeg \(args.joined(separator: " "))")
         
@@ -745,47 +831,75 @@ class DownloadManager: ObservableObject {
         do {
             try remuxProcess.run()
             remuxProcess.waitUntilExit()
-            
+
             pipe.fileHandleForReading.readabilityHandler = nil
-            
-            DispatchQueue.main.async {
-                if remuxProcess.terminationStatus == 0 {
-                    self.addLog("✅ Remux completed: \(outputPath)")
-                    self.downloadedFilePath = outputPath
-                    self.cleanupAssociatedTempFiles(finalPath: outputPath)
-                    self.cleanupSidecarFiles(for: outputPath)
-                    self.statusMessage = "Remuxing completed successfully!"
-                    self.progress = 1.0
-                    
-                    if settings.deleteOriginal {
-                        do {
-                            try FileManager.default.removeItem(atPath: inputPath)
-                            self.addLog("Deleted original file: \(inputPath)")
-                        } catch {
-                            self.addLog("Failed to delete original file: \(error)")
+
+            if remuxProcess.terminationStatus == 0 {
+                let finalPath: String
+
+                if tempOutputPath != outputPath {
+                    do {
+                        if FileManager.default.fileExists(atPath: outputPath) {
+                            try FileManager.default.removeItem(atPath: outputPath)
                         }
+                        try FileManager.default.moveItem(atPath: tempOutputPath, toPath: outputPath)
+                        finalPath = outputPath
+                    } catch {
+                        self.addLog("Failed to replace original during remux: \(error)")
+                        try? FileManager.default.removeItem(atPath: tempOutputPath)
+                        completion(false, "Failed to finalize remuxed file", nil)
+                        return
                     }
                 } else {
-                    self.addLog("❌ Remux failed with exit code \(remuxProcess.terminationStatus)")
-                    self.statusMessage = "Remuxing failed - falling back to conversion"
-                    self.convertVideo(inputPath: inputPath, outputPath: outputPath, settings: settings)
-                    return
+                    finalPath = outputPath
                 }
-                self.isDownloading = false
+
+                self.addLog("✅ Remux completed: \(finalPath)")
+                self.downloadedFilePath = finalPath
+                self.cleanupAssociatedTempFiles(finalPath: finalPath)
+                self.cleanupSidecarFiles(for: finalPath)
+                DispatchQueue.main.async {
+                    self.statusMessage = "Remuxing completed successfully!"
+                    self.progress = max(self.progress, 0.85)
+                }
+
+                if settings.deleteOriginal && inputPath != finalPath {
+                    do {
+                        try FileManager.default.removeItem(atPath: inputPath)
+                        self.addLog("Deleted original file: \(inputPath)")
+                    } catch {
+                        self.addLog("Failed to delete original file: \(error)")
+                    }
+                }
+
+                completion(true, nil, finalPath)
+            } else {
+                self.addLog("❌ Remux failed with exit code \(remuxProcess.terminationStatus)")
+                DispatchQueue.main.async {
+                    self.statusMessage = "Remuxing failed - falling back to conversion"
+                }
+                if tempOutputPath != outputPath {
+                    try? FileManager.default.removeItem(atPath: tempOutputPath)
+                }
+                self.convertVideo(inputPath: inputPath, outputPath: outputPath, settings: settings, completion: completion)
             }
         } catch {
             addLog("Failed to start remux: \(error)")
             DispatchQueue.main.async {
                 self.statusMessage = "Remuxing failed - falling back to conversion"
-                self.convertVideo(inputPath: inputPath, outputPath: outputPath, settings: settings)
             }
+            if tempOutputPath != outputPath {
+                try? FileManager.default.removeItem(atPath: tempOutputPath)
+            }
+            self.convertVideo(inputPath: inputPath, outputPath: outputPath, settings: settings, completion: completion)
         }
     }
     
-    private func convertVideo(inputPath: String, outputPath: String, settings: YtDlpSettings) {
+    private func convertVideo(inputPath: String, outputPath: String, settings: YtDlpSettings, completion: @escaping (Bool, String?, String?) -> Void) {
         let ffmpegPath = settings.customFfmpegPath.isEmpty ? findFfmpegPath() : expandPath(settings.customFfmpegPath)
         
         guard !ffmpegPath.isEmpty else {
+            completion(false, "Conversion failed: ffmpeg not found", nil)
             return
         }
         
@@ -797,7 +911,8 @@ class DownloadManager: ObservableObject {
         }
         
         var args = ["-i", inputPath]
-        
+        let tempOutputPath = outputPath == inputPath ? makeTemporaryPath(for: outputPath, suffix: ".converted") : outputPath
+
         // Video codec selection
         if settings.videoCodec == "auto" {
             switch settings.format.lowercased() {
@@ -858,7 +973,7 @@ class DownloadManager: ObservableObject {
         // Progress reporting
         args.append(contentsOf: ["-progress", "pipe:1"])
         args.append(contentsOf: ["-y"]) // Overwrite output file
-        args.append(outputPath)
+        args.append(tempOutputPath)
         
         addLog("Conversion command: ffmpeg \(args.joined(separator: " "))")
         
@@ -881,39 +996,67 @@ class DownloadManager: ObservableObject {
         do {
             try conversionProcess.run()
             conversionProcess.waitUntilExit()
-            
+
             pipe.fileHandleForReading.readabilityHandler = nil
-            
-            DispatchQueue.main.async {
-                if conversionProcess.terminationStatus == 0 {
-                    self.addLog("✅ Conversion completed: \(outputPath)")
-                    self.downloadedFilePath = outputPath
-                    self.cleanupAssociatedTempFiles(finalPath: outputPath)
-                    self.cleanupSidecarFiles(for: outputPath)
-                    self.statusMessage = "Conversion completed successfully!"
-                    self.progress = 1.0
-                    
-                    // Delete original if requested
-                    if settings.deleteOriginal {
-                        do {
-                            try FileManager.default.removeItem(atPath: inputPath)
-                            self.addLog("Deleted original file: \(inputPath)")
-                        } catch {
-                            self.addLog("Failed to delete original file: \(error)")
+
+            if conversionProcess.terminationStatus == 0 {
+                let finalPath: String
+
+                if tempOutputPath != outputPath {
+                    do {
+                        if FileManager.default.fileExists(atPath: outputPath) {
+                            try FileManager.default.removeItem(atPath: outputPath)
                         }
+                        try FileManager.default.moveItem(atPath: tempOutputPath, toPath: outputPath)
+                        finalPath = outputPath
+                    } catch {
+                        self.addLog("Failed to replace original with converted file: \(error)")
+                        try? FileManager.default.removeItem(atPath: tempOutputPath)
+                        completion(false, "Failed to finalize converted file", nil)
+                        return
                     }
                 } else {
-                    self.addLog("❌ Conversion failed with exit code \(conversionProcess.terminationStatus)")
+                    finalPath = outputPath
+                }
+
+                self.addLog("✅ Conversion completed: \(finalPath)")
+                self.downloadedFilePath = finalPath
+                self.cleanupAssociatedTempFiles(finalPath: finalPath)
+                self.cleanupSidecarFiles(for: finalPath)
+                DispatchQueue.main.async {
+                    self.statusMessage = "Conversion completed successfully!"
+                    self.progress = max(self.progress, 0.9)
+                }
+
+                if settings.deleteOriginal && inputPath != finalPath {
+                    do {
+                        try FileManager.default.removeItem(atPath: inputPath)
+                        self.addLog("Deleted original file: \(inputPath)")
+                    } catch {
+                        self.addLog("Failed to delete original file: \(error)")
+                    }
+                }
+
+                completion(true, nil, finalPath)
+            } else {
+                self.addLog("❌ Conversion failed with exit code \(conversionProcess.terminationStatus)")
+                DispatchQueue.main.async {
                     self.statusMessage = "Conversion failed"
                 }
-                self.isDownloading = false
+                if tempOutputPath != outputPath {
+                    try? FileManager.default.removeItem(atPath: tempOutputPath)
+                }
+                completion(false, "Conversion failed with exit code \(conversionProcess.terminationStatus)", nil)
             }
         } catch {
             addLog("Failed to start conversion: \(error)")
             DispatchQueue.main.async {
                 self.statusMessage = "Failed to start conversion: \(error.localizedDescription)"
-                self.isDownloading = false
             }
+            if tempOutputPath != outputPath {
+                try? FileManager.default.removeItem(atPath: tempOutputPath)
+            }
+            completion(false, "Failed to start conversion: \(error.localizedDescription)", nil)
         }
     }
     
@@ -938,6 +1081,8 @@ class DownloadManager: ObservableObject {
         self.settings = effectiveSettings
         self.needsConversion = false
         self.downloadedFilePath = ""
+        self.downloadedFilesForSession.removeAll()
+        self.pendingProcessingFiles.removeAll()
 
         let ytdlpPath = effectiveSettings.customYtdlpPath.isEmpty ?
             findYTdlpPath() : expandPath(effectiveSettings.customYtdlpPath)
@@ -1001,11 +1146,15 @@ class DownloadManager: ObservableObject {
                 if exitCode == 0 {
                     self.addLog("Download completed successfully")
 
-                    // Check if we need processing
-                    if self.needsConversion && !self.downloadedFilePath.isEmpty {
-                        self.processVideo(inputPath: self.downloadedFilePath, settings: effectiveSettings)
+                    self.pendingProcessingFiles = self.downloadedFilesForSession
+                    self.downloadedFilesForSession.removeAll()
+
+                    let successMessage = "Download completed successfully!"
+
+                    if self.needsConversion {
+                        self.processNextPendingFile(settings: effectiveSettings, successMessage: successMessage)
                     } else {
-                        self.completeDownloadWithoutFurtherProcessing(at: self.downloadedFilePath)
+                        self.finalizePendingFilesWithoutProcessing(successMessage: successMessage)
                     }
                 } else {
                     DispatchQueue.main.async {
@@ -1013,6 +1162,8 @@ class DownloadManager: ObservableObject {
                         self.progress = 0.0
                         self.isDownloading = false
                     }
+                    self.pendingProcessingFiles.removeAll()
+                    self.downloadedFilesForSession.removeAll()
                     self.addLog("Download failed with exit code \(exitCode)")
                 }
             } catch {
@@ -1023,6 +1174,8 @@ class DownloadManager: ObservableObject {
                     self.downloadSpeed = ""
                     self.eta = ""
                 }
+                self.pendingProcessingFiles.removeAll()
+                self.downloadedFilesForSession.removeAll()
                 self.addLog("Failed to start download: \(error.localizedDescription)")
             }
         }
@@ -1044,16 +1197,33 @@ class DownloadManager: ObservableObject {
                 addLog("Raw output: \(trimmedLine)")
             }
             
+            if let destinationRange = trimmedLine.range(of: "Destination:") {
+                let rawPath = trimmedLine[destinationRange.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+                if !rawPath.isEmpty {
+                    recordDownloadedFile(path: rawPath.trimmingCharacters(in: CharacterSet(charactersIn: "\"'")))
+                    continue
+                }
+            }
+
+            if let mergerRange = trimmedLine.range(of: "Merging formats into \"") {
+                let tail = trimmedLine[mergerRange.upperBound...]
+                if let closingQuoteIndex = tail.firstIndex(of: "\"") {
+                    let rawPath = String(tail[..<closingQuoteIndex])
+                    recordDownloadedFile(path: rawPath)
+                    continue
+                }
+            }
+
             if !trimmedLine.hasPrefix("[") && trimmedLine.contains("/") {
                 let lowercasedLine = trimmedLine.lowercased()
                 let knownExtensions = [
-                    "mp4", "mkv", "webm", "avi", "m4a", "mp3",
-                    "flac", "wav", "opus", "ogg", "aac"
+                    "mp4", "mkv", "webm", "avi", "mov", "m4v",
+                    "m4a", "mp3", "flac", "wav", "opus", "ogg",
+                    "aac", "ts"
                 ]
 
                 if knownExtensions.contains(where: { lowercasedLine.hasSuffix(".\($0)") }) {
-                    downloadedFilePath = trimmedLine
-                    addLog("Downloaded file: \(trimmedLine)")
+                    recordDownloadedFile(path: trimmedLine)
                 }
             }
             
