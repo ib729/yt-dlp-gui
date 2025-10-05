@@ -32,10 +32,16 @@ struct ContentView: View {
     
     private var headerView: some View {
         HStack {
-            Text("yt-dlp-gui")
-                .font(.title2)
-                .fontWeight(.semibold)
-            
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("yt-dlp-gui")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+
+                Text("v1.1.2")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+
             Spacer()
             
             Button(action: { showSettings = true }) {

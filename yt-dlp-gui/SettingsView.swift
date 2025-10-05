@@ -123,7 +123,10 @@ struct SettingsView: View {
                 }
             }
             
-            settingsField(label: "Custom yt-dlp Path", footer: "yt-dlp powers downloads. Install with: brew install yt-dlp") {
+            settingsField(
+                label: "Custom yt-dlp Path",
+                footer: binaryMissing("yt-dlp", customPath: settings.customYtdlpPath) ? "yt-dlp powers downloads. Install with: brew install yt-dlp" : nil
+            ) {
                 HStack(spacing: 12) {
                     TextField("Auto-detect", text: $settings.customYtdlpPath)
                         .textFieldStyle(.roundedBorder)
@@ -133,7 +136,10 @@ struct SettingsView: View {
                 }
             }
             
-            settingsField(label: "Custom FFmpeg Path", footer: "FFmpeg is required for audio extraction and video processing. Install with: brew install ffmpeg") {
+            settingsField(
+                label: "Custom FFmpeg Path",
+                footer: binaryMissing("ffmpeg", customPath: settings.customFfmpegPath) ? "FFmpeg is required for audio extraction and video processing. Install with: brew install ffmpeg" : nil
+            ) {
                 HStack(spacing: 12) {
                     TextField("Auto-detect", text: $settings.customFfmpegPath)
                         .textFieldStyle(.roundedBorder)
@@ -455,5 +461,45 @@ struct SettingsView: View {
                 settings.customFfmpegPath = url.path
             }
         }
+    }
+    
+    private func binaryMissing(_ name: String, customPath: String) -> Bool {
+        let fm = FileManager.default
+        let resolvedCustom = expandTilde(customPath)
+        if !resolvedCustom.isEmpty, fm.isExecutableFile(atPath: resolvedCustom) {
+            return false
+        }
+
+        let pathVariable = ProcessInfo.processInfo.environment["PATH"] ?? ""
+        var searchPaths = pathVariable
+            .split(separator: ":")
+            .map(String.init)
+
+        let fallbackPaths = [
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "/usr/bin",
+            "/bin",
+            "/opt/homebrew/sbin",
+            "/usr/local/sbin"
+        ]
+
+        searchPaths.append(contentsOf: fallbackPaths)
+        var visited = Set<String>()
+
+        for path in searchPaths {
+            let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, visited.insert(trimmed).inserted else { continue }
+            let candidate = (trimmed as NSString).appendingPathComponent(name)
+            if fm.isExecutableFile(atPath: candidate) {
+                return false
+            }
+        }
+        return true
+    }
+
+    private func expandTilde(_ path: String) -> String {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "" : (trimmed as NSString).expandingTildeInPath
     }
 }
