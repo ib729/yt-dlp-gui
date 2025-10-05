@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 @main
 struct yt_dlp_guiApp: App {
@@ -10,6 +11,12 @@ struct yt_dlp_guiApp: App {
         .windowToolbarStyle(.unified)
         .defaultSize(width: 1100, height: 720)
         .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("About yt-dlp-gui") {
+                    AboutWindowCoordinator.shared.show()
+                }
+            }
+
             CommandGroup(replacing: .appSettings) {
                 Button("Preferences...") {
                     NotificationCenter.default.post(name: .openSettings, object: nil)
