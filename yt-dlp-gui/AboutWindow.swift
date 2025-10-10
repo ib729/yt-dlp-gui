@@ -74,7 +74,7 @@ struct AboutAppView: View {
                 // Description
                 Text(info.description)
                     .font(.system(size: 13, weight: .regular, design: .default))
-                    .foregroundStyle(Color(white: 0.7))
+                    .foregroundStyle(Color(white: 0.65))
                     .multilineTextAlignment(.center)
                     .lineSpacing(3)
                     .frame(maxWidth: 280)
@@ -85,12 +85,12 @@ struct AboutAppView: View {
                 // Version info
                 HStack(spacing: 6) {
                     Text("Version")
-                        .foregroundStyle(Color(white: 0.6))
-                    Text(info.version)
                         .foregroundStyle(Color(white: 0.85))
+                    Text(info.version)
+                        .foregroundStyle(Color(white: 0.65))
                         .fontWeight(.medium)
                 }
-                .font(.system(size: 12, design: .monospaced))
+                .font(.system(size: 12))
 
                 Spacer()
                     .frame(height: 24)
@@ -101,8 +101,8 @@ struct AboutAppView: View {
                 } label: {
                     Text("GitHub")
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.white)
-                        .frame(width: 90, height: 28)
+                        .foregroundStyle(Color(white:0.85))
+                        .frame(width: 70, height: 24)
                         .background(
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
                                 .fill(Color(white: isHoveringButton ? 0.3 : 0.25))
