@@ -793,7 +793,13 @@ class DownloadManager: ObservableObject {
         addLog("🚀 Remuxing (no re-encoding): \(inputPath) -> \(outputPath)")
 
         DispatchQueue.main.async {
-            self.statusMessage = "Remuxing to \(settings.format) (preserving quality)..."
+            self.statusMessage = String(
+                format: String(
+                    localized: "status_remuxing_preserving_quality",
+                    comment: "Status while remuxing media with format placeholder"
+                ),
+                settings.format
+            )
             self.progress = max(self.progress, 0.5)
         }
 
@@ -867,7 +873,10 @@ class DownloadManager: ObservableObject {
                 self.cleanupAssociatedTempFiles(finalPath: finalPath)
                 self.cleanupSidecarFiles(for: finalPath)
                 DispatchQueue.main.async {
-                    self.statusMessage = "Remuxing completed successfully!"
+                    self.statusMessage = String(
+                        localized: "status_remux_complete",
+                        comment: "Status when remux completes successfully"
+                    )
                     self.progress = max(self.progress, 0.85)
                 }
 
@@ -884,7 +893,10 @@ class DownloadManager: ObservableObject {
             } else {
                 self.addLog("❌ Remux failed with exit code \(remuxProcess.terminationStatus)")
                 DispatchQueue.main.async {
-                    self.statusMessage = "Remuxing failed - falling back to conversion"
+                    self.statusMessage = String(
+                        localized: "status_remux_failed_fallback",
+                        comment: "Status when remux fails and conversion will be attempted"
+                    )
                 }
                 if tempOutputPath != outputPath {
                     try? FileManager.default.removeItem(atPath: tempOutputPath)
@@ -894,7 +906,10 @@ class DownloadManager: ObservableObject {
         } catch {
             addLog("Failed to start remux: \(error)")
             DispatchQueue.main.async {
-                self.statusMessage = "Remuxing failed - falling back to conversion"
+                self.statusMessage = String(
+                    localized: "status_remux_failed_fallback",
+                    comment: "Status when remux cannot start and conversion will be attempted"
+                )
             }
             if tempOutputPath != outputPath {
                 try? FileManager.default.removeItem(atPath: tempOutputPath)
@@ -914,7 +929,13 @@ class DownloadManager: ObservableObject {
         addLog("⚙️ Converting with re-encoding: \(inputPath) -> \(outputPath)")
         
         DispatchQueue.main.async {
-            self.statusMessage = "Converting to \(settings.format) (re-encoding)..."
+            self.statusMessage = String(
+                format: String(
+                    localized: "status_conversion_in_progress",
+                    comment: "Status while conversion runs with format placeholder"
+                ),
+                settings.format
+            )
             self.progress = 0.0
         }
         
@@ -1032,7 +1053,10 @@ class DownloadManager: ObservableObject {
                 self.cleanupAssociatedTempFiles(finalPath: finalPath)
                 self.cleanupSidecarFiles(for: finalPath)
                 DispatchQueue.main.async {
-                    self.statusMessage = "Conversion completed successfully!"
+                    self.statusMessage = String(
+                        localized: "status_conversion_complete",
+                        comment: "Status when conversion finishes successfully"
+                    )
                     self.progress = max(self.progress, 0.9)
                 }
 
@@ -1049,7 +1073,10 @@ class DownloadManager: ObservableObject {
             } else {
                 self.addLog("❌ Conversion failed with exit code \(conversionProcess.terminationStatus)")
                 DispatchQueue.main.async {
-                    self.statusMessage = "Conversion failed"
+                    self.statusMessage = String(
+                        localized: "status_conversion_failed",
+                        comment: "Status when conversion fails"
+                    )
                 }
                 if tempOutputPath != outputPath {
                     try? FileManager.default.removeItem(atPath: tempOutputPath)
@@ -1059,7 +1086,13 @@ class DownloadManager: ObservableObject {
         } catch {
             addLog("Failed to start conversion: \(error)")
             DispatchQueue.main.async {
-                self.statusMessage = "Failed to start conversion: \(error.localizedDescription)"
+                self.statusMessage = String(
+                    format: String(
+                        localized: "status_conversion_start_failed",
+                        comment: "Status when conversion process fails to launch with error detail"
+                    ),
+                    error.localizedDescription
+                )
             }
             if tempOutputPath != outputPath {
                 try? FileManager.default.removeItem(atPath: tempOutputPath)
@@ -1105,7 +1138,13 @@ class DownloadManager: ObservableObject {
 
         guard !ytdlpPath.isEmpty else {
             DispatchQueue.main.async {
-                self.statusMessage = "Error: yt-dlp not found. Please install it via Homebrew: brew install yt-dlp"
+                self.statusMessage = String(
+                    format: String(
+                        localized: "status_error_ytdlp_missing",
+                        comment: "Status when yt-dlp is missing with install command placeholder"
+                    ),
+                    "brew install yt-dlp"
+                )
                 self.isDownloading = false
             }
             addLog("Error: yt-dlp not found")
@@ -1114,7 +1153,13 @@ class DownloadManager: ObservableObject {
         
         guard FileManager.default.fileExists(atPath: ytdlpPath) else {
             DispatchQueue.main.async {
-                self.statusMessage = "Error: yt-dlp not found at path: \(ytdlpPath)"
+                self.statusMessage = String(
+                    format: String(
+                        localized: "status_error_ytdlp_missing_path",
+                        comment: "Status when yt-dlp path is invalid"
+                    ),
+                    ytdlpPath
+                )
                 self.isDownloading = false
             }
             addLog("Error: yt-dlp not found at path: \(ytdlpPath)")
@@ -1126,9 +1171,18 @@ class DownloadManager: ObservableObject {
         DispatchQueue.main.async {
             self.isDownloading = true
             if downloadCount == 1 {
-                self.statusMessage = "Starting download..."
+                self.statusMessage = String(
+                    localized: "status_starting_single_download",
+                    comment: "Status when starting a single download"
+                )
             } else {
-                self.statusMessage = "Starting downloads (\(downloadCount) items)..."
+                self.statusMessage = String(
+                    format: String(
+                        localized: "status_starting_multiple_downloads",
+                        comment: "Status when starting multiple downloads with count placeholder"
+                    ),
+                    downloadCount
+                )
             }
             self.progress = 0.0
             self.downloadSpeed = ""
@@ -1174,7 +1228,10 @@ class DownloadManager: ObservableObject {
                     self.pendingProcessingFiles = self.downloadedFilesForSession
                     self.downloadedFilesForSession.removeAll()
 
-                    let successMessage = "Download completed successfully!"
+                    let successMessage = String(
+                        localized: "status_download_complete",
+                        comment: "Status when downloads complete successfully"
+                    )
 
                     if self.needsConversion {
                         self.processNextPendingFile(settings: effectiveSettings, successMessage: successMessage)
@@ -1183,7 +1240,13 @@ class DownloadManager: ObservableObject {
                     }
                 } else {
                     DispatchQueue.main.async {
-                        self.statusMessage = "Download failed with exit code \(exitCode)"
+                        self.statusMessage = String(
+                            format: String(
+                                localized: "status_download_failed_code",
+                                comment: "Status when download terminates with an exit code"
+                            ),
+                            exitCode
+                        )
                         self.progress = 0.0
                         self.isDownloading = false
                     }
@@ -1193,7 +1256,13 @@ class DownloadManager: ObservableObject {
                 }
             } catch {
                 DispatchQueue.main.async {
-                    self.statusMessage = "Failed to start download: \(error.localizedDescription)"
+                    self.statusMessage = String(
+                        format: String(
+                            localized: "status_download_start_failed",
+                            comment: "Status when download process fails to launch"
+                        ),
+                        error.localizedDescription
+                    )
                     self.isDownloading = false
                     self.progress = 0.0
                     self.downloadSpeed = ""
@@ -1268,11 +1337,23 @@ class DownloadManager: ObservableObject {
                 }
             } else if trimmedLine.contains("ERROR") {
                 DispatchQueue.main.async {
-                    self.statusMessage = "❌ \(trimmedLine)"
+                    self.statusMessage = String(
+                        format: String(
+                            localized: "status_error_line",
+                            comment: "Status prefix for error output"
+                        ),
+                        trimmedLine
+                    )
                 }
             } else if trimmedLine.contains("WARNING") {
                 DispatchQueue.main.async {
-                    self.statusMessage = "⚠️ \(trimmedLine)"
+                    self.statusMessage = String(
+                        format: String(
+                            localized: "status_warning_line",
+                            comment: "Status prefix for warning output"
+                        ),
+                        trimmedLine
+                    )
                 }
             } else {
                 DispatchQueue.main.async {
@@ -1372,7 +1453,13 @@ class DownloadManager: ObservableObject {
                 if let etaRange = Range(match.range(at: 1), in: line) {
                     let eta = String(line[etaRange])
                     DispatchQueue.main.async {
-                        self.eta = "ETA \(eta)"
+                        self.eta = String(
+                            format: String(
+                                localized: "status_eta_format",
+                                comment: "ETA label with time placeholder"
+                            ),
+                            eta
+                        )
                     }
                     if settings?.enableVerboseLogging == true {
                         addLog("ETA: \(eta)")
@@ -1392,7 +1479,10 @@ class DownloadManager: ObservableObject {
         addLog("Download cancelled by user")
         DispatchQueue.main.async {
             self.isDownloading = false
-            self.statusMessage = "Download cancelled"
+            self.statusMessage = String(
+                localized: "status_download_cancelled",
+                comment: "Status when user cancels the download"
+            )
             self.progress = 0.0
             self.downloadSpeed = ""
             self.eta = ""

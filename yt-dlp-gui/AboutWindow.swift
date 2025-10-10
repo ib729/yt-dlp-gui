@@ -13,10 +13,16 @@ struct AboutWindowInfo {
 
         let appName = info["CFBundleDisplayName"] as? String
             ?? info["CFBundleName"] as? String
-            ?? "yt-dlp-gui"
+            ?? String(
+                localized: "about_app_name_fallback",
+                comment: "Fallback app name shown in About window"
+            )
 
         let description = info["AppDescription"] as? String
-            ?? "A native SwiftUI interface for yt-dlp."
+            ?? String(
+                localized: "about_description_fallback",
+                comment: "Fallback app description shown in About window"
+            )
 
         let version = info["CFBundleShortVersionString"] as? String ?? "—"
 
@@ -84,7 +90,7 @@ struct AboutAppView: View {
 
                 // Version info
                 HStack(spacing: 6) {
-                    Text("Version")
+                    Text("about_version_label")
                         .foregroundStyle(Color(white: 0.85))
                     Text(info.version)
                         .foregroundStyle(Color(white: 0.65))
@@ -99,7 +105,7 @@ struct AboutAppView: View {
                 Button {
                     openURL(info.projectURL)
                 } label: {
-                    Text("GitHub")
+                    Text("about_github_button")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(Color(white:0.85))
                         .frame(width: 70, height: 24)

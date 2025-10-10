@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 import UniformTypeIdentifiers
 
 struct SettingsView: View {
@@ -7,16 +8,46 @@ struct SettingsView: View {
     @State private var cookieCount: Int = 0
     @State private var isYtdlpMissing: Bool = false
     @State private var isFfmpegMissing: Bool = false
-    private let browserCookieOptions: [(label: String, value: String)] = [
-        ("Safari", "safari"),
-        ("Brave", "brave"),
-        ("Google Chrome", "chrome"),
-        ("Chromium", "chromium"),
-        ("Microsoft Edge", "edge"),
-        ("Firefox", "firefox"),
-        ("Opera", "opera"),
-        ("Vivaldi", "vivaldi")
+    private let browserCookieOptions: [(labelKey: LocalizedStringKey, value: String)] = [
+        ("browser_option_safari", "safari"),
+        ("browser_option_brave", "brave"),
+        ("browser_option_chrome", "chrome"),
+        ("browser_option_chromium", "chromium"),
+        ("browser_option_edge", "edge"),
+        ("browser_option_firefox", "firefox"),
+        ("browser_option_opera", "opera"),
+        ("browser_option_vivaldi", "vivaldi")
     ]
+    private var ytdlpFooterText: String? {
+        guard isYtdlpMissing else { return nil }
+        return String(
+            format: String(
+                localized: "settings_ytdlp_missing_footer",
+                comment: "Footer advising yt-dlp installation"
+            ),
+            "brew install yt-dlp"
+        )
+    }
+    private var ffmpegFooterText: String? {
+        guard isFfmpegMissing else { return nil }
+        return String(
+            format: String(
+                localized: "settings_ffmpeg_missing_footer",
+                comment: "Footer advising ffmpeg installation"
+            ),
+            "brew install ffmpeg"
+        )
+    }
+    private var cookiesLoadedText: String {
+        String(
+            format: String(
+                localized: "settings_cookies_loaded_format",
+                comment: "Indicates how many cookies were loaded"
+            ),
+            locale: Locale.current,
+            cookieCount
+        )
+    }
     
     init(settings: Binding<YtDlpSettings>) {
         _settings = settings
@@ -54,16 +85,16 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .background(Color(NSColor.windowBackgroundColor))
-            .navigationTitle("Settings")
+            .navigationTitle("settings_title")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button("settings_cancel") {
                         presentationMode.wrappedValue.dismiss()
                     }
                 }
                 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button("settings_save") {
                         settings.save()
                         presentationMode.wrappedValue.dismiss()
                     }
@@ -87,7 +118,11 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private func settingsGroup<Content: View>(title: String, systemImage: String, @ViewBuilder content: () -> Content) -> some View {
+    private func settingsGroup<Content: View>(
+        title: LocalizedStringKey,
+        systemImage: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 10) {
                 Image(systemName: systemImage)
@@ -115,9 +150,14 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private func settingsField<Content: View>(label: String, footer: String? = nil, @ViewBuilder content: () -> Content) -> some View {
+    private func settingsField<Content: View>(
+        label: LocalizedStringKey,
+        footer: String? = nil,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(label.uppercased())
+            Text(label)
+                .textCase(.uppercase)
                 .font(.caption)
                 .fontWeight(.semibold)
                 .foregroundColor(.secondary)
@@ -134,38 +174,38 @@ struct SettingsView: View {
     }
 
     private var generalSection: some View {
-        settingsGroup(title: "General", systemImage: "gearshape") {
-            settingsField(label: "Output Directory") {
+        settingsGroup(title: "settings_section_general", systemImage: "gearshape") {
+            settingsField(label: "settings_field_output_directory") {
                 HStack(spacing: 12) {
-                    TextField("~/Downloads", text: $settings.outputPath)
+                    TextField("settings_output_placeholder", text: $settings.outputPath)
                         .textFieldStyle(.roundedBorder)
-                    Button("Browse", action: selectOutputDirectory)
+                    Button("settings_browse_button", action: selectOutputDirectory)
                         .controlSize(.small)
                         .buttonStyle(.bordered)
                 }
             }
             
             settingsField(
-                label: "Custom yt-dlp Path",
-                footer: isYtdlpMissing ? "yt-dlp powers downloads. Install with: brew install yt-dlp" : nil
+                label: "settings_field_custom_ytdlp_path",
+                footer: ytdlpFooterText
             ) {
                 HStack(spacing: 12) {
-                    TextField("Auto-detect", text: $settings.customYtdlpPath)
+                    TextField("settings_autodetect_placeholder", text: $settings.customYtdlpPath)
                         .textFieldStyle(.roundedBorder)
-                    Button("Browse", action: selectYtdlpPath)
+                    Button("settings_browse_button", action: selectYtdlpPath)
                         .controlSize(.small)
                         .buttonStyle(.bordered)
                 }
             }
             
             settingsField(
-                label: "Custom FFmpeg Path",
-                footer: isFfmpegMissing ? "FFmpeg is required for audio extraction and video processing. Install with: brew install ffmpeg" : nil
+                label: "settings_field_custom_ffmpeg_path",
+                footer: ffmpegFooterText
             ) {
                 HStack(spacing: 12) {
-                    TextField("Auto-detect", text: $settings.customFfmpegPath)
+                    TextField("settings_autodetect_placeholder", text: $settings.customFfmpegPath)
                         .textFieldStyle(.roundedBorder)
-                    Button("Browse", action: selectFfmpegPath)
+                    Button("settings_browse_button", action: selectFfmpegPath)
                         .controlSize(.small)
                         .buttonStyle(.bordered)
                 }
@@ -174,99 +214,99 @@ struct SettingsView: View {
     }
     
     private var videoSection: some View {
-        settingsGroup(title: "Video", systemImage: "film") {
-            settingsField(label: "Video Format") {
-                Picker("Video Format", selection: $settings.format) {
-                    Text("Best Available").tag("best")
-                    Text("MP4").tag("mp4")
-                    Text("WebM").tag("webm")
-                    Text("MKV").tag("mkv")
-                    Text("AVI").tag("avi")
+        settingsGroup(title: "settings_section_video", systemImage: "film") {
+            settingsField(label: "settings_field_video_format") {
+                Picker("settings_picker_video_format", selection: $settings.format) {
+                    Text("settings_option_video_best").tag("best")
+                    Text("settings_option_video_mp4").tag("mp4")
+                    Text("settings_option_video_webm").tag("webm")
+                    Text("settings_option_video_mkv").tag("mkv")
+                    Text("settings_option_video_avi").tag("avi")
                 }
                 .pickerStyle(.menu)
                 .disabled(settings.audioOnly || settings.subtitleOnly)
             }
             
-            settingsField(label: "Resolution Cap") {
-                Picker("Video Quality", selection: $settings.quality) {
-                    Text("Best Available").tag("best")
-                    Text("4K (2160p)").tag("height<=2160")
-                    Text("1440p").tag("height<=1440")
-                    Text("1080p").tag("height<=1080")
-                    Text("720p").tag("height<=720")
-                    Text("480p").tag("height<=480")
-                    Text("360p").tag("height<=360")
+            settingsField(label: "settings_field_resolution_cap") {
+                Picker("settings_picker_video_quality", selection: $settings.quality) {
+                    Text("settings_option_quality_best").tag("best")
+                    Text("settings_option_quality_2160p").tag("height<=2160")
+                    Text("settings_option_quality_1440p").tag("height<=1440")
+                    Text("settings_option_quality_1080p").tag("height<=1080")
+                    Text("settings_option_quality_720p").tag("height<=720")
+                    Text("settings_option_quality_480p").tag("height<=480")
+                    Text("settings_option_quality_360p").tag("height<=360")
                 }
                 .pickerStyle(.menu)
                 .disabled(settings.audioOnly || settings.subtitleOnly)
             }
 
-            settingsField(label: "Preferred Codec") {
-                Picker("Video Codec", selection: $settings.videoCodec) {
-                    Text("Auto").tag("auto")
-                    Text("H.264").tag("h264")
-                    Text("H.265 (HEVC)").tag("h265")
-                    Text("VP9").tag("vp9")
-                    Text("AV1 (SVT-AV1)").tag("av01")
+            settingsField(label: "settings_field_preferred_codec") {
+                Picker("settings_picker_video_codec", selection: $settings.videoCodec) {
+                    Text("settings_option_codec_auto").tag("auto")
+                    Text("settings_option_codec_h264").tag("h264")
+                    Text("settings_option_codec_h265").tag("h265")
+                    Text("settings_option_codec_vp9").tag("vp9")
+                    Text("settings_option_codec_av1").tag("av01")
                 }
                 .pickerStyle(.menu)
                 .disabled(settings.audioOnly || settings.subtitleOnly)
-                .help("Prefers libsvtav1 when available, falling back to libaom-av1.")
+                .help("settings_video_codec_help")
             }
         }
     }
     
     private var audioSection: some View {
-        settingsGroup(title: "Audio", systemImage: "music.note") {
-            Toggle("Audio Only", isOn: $settings.audioOnly)
+        settingsGroup(title: "settings_section_audio", systemImage: "music.note") {
+            Toggle("settings_toggle_audio_only", isOn: $settings.audioOnly)
                 .toggleStyle(.switch)
                 .padding(.vertical, 4)
                 .disabled(settings.subtitleOnly)
             
-            settingsField(label: "Audio Format") {
-                Picker("Audio Format", selection: $settings.audioFormat) {
-                    Text("MP3").tag("mp3")
-                    Text("AAC").tag("aac")
-                    Text("OGG Vorbis").tag("ogg")
-                    Text("Opus").tag("opus")
-                    Text("M4A").tag("m4a")
-                    Text("FLAC").tag("flac")
-                    Text("WAV").tag("wav")
+            settingsField(label: "settings_field_audio_format") {
+                Picker("settings_picker_audio_format", selection: $settings.audioFormat) {
+                    Text("settings_option_audio_mp3").tag("mp3")
+                    Text("settings_option_audio_aac").tag("aac")
+                    Text("settings_option_audio_ogg").tag("ogg")
+                    Text("settings_option_audio_opus").tag("opus")
+                    Text("settings_option_audio_m4a").tag("m4a")
+                    Text("settings_option_audio_flac").tag("flac")
+                    Text("settings_option_audio_wav").tag("wav")
                 }
                 .pickerStyle(.menu)
                 .disabled(settings.subtitleOnly)
             }
             
-            settingsField(label: "Bitrate") {
-                Picker("Audio Quality", selection: $settings.audioQuality) {
-                    Text("320 kbps").tag("320")
-                    Text("256 kbps").tag("256")
-                    Text("192 kbps").tag("192")
-                    Text("128 kbps").tag("128")
-                    Text("96 kbps").tag("96")
-                    Text("64 kbps").tag("64")
+            settingsField(label: "settings_field_audio_bitrate") {
+                Picker("settings_picker_audio_quality", selection: $settings.audioQuality) {
+                    Text("settings_option_bitrate_320").tag("320")
+                    Text("settings_option_bitrate_256").tag("256")
+                    Text("settings_option_bitrate_192").tag("192")
+                    Text("settings_option_bitrate_128").tag("128")
+                    Text("settings_option_bitrate_96").tag("96")
+                    Text("settings_option_bitrate_64").tag("64")
                 }
                 .pickerStyle(.menu)
                 .disabled(settings.subtitleOnly)
             }
             
             if settings.audioOnly {
-                Toggle("Keep video file after extraction", isOn: $settings.keepVideo)
+                Toggle("settings_toggle_keep_video", isOn: $settings.keepVideo)
                     .disabled(settings.subtitleOnly)
             }
         }
     }
     
     private var postProcessingSection: some View {
-        settingsGroup(title: "Post-Processing", systemImage: "wand.and.stars") {
+        settingsGroup(title: "settings_section_post_processing", systemImage: "wand.and.stars") {
             Group {
-                Toggle("Force conversion", isOn: $settings.forceConversion)
+                Toggle("settings_toggle_force_conversion", isOn: $settings.forceConversion)
                 
                 if !settings.audioOnly {
-                    Toggle("Delete original after conversion", isOn: $settings.deleteOriginal)
+                    Toggle("settings_toggle_delete_original", isOn: $settings.deleteOriginal)
                 }
                 
-                Text("Forcing conversion re-encodes media even when the source matches your target format.")
+                Text("settings_text_force_conversion_warning")
                     .font(.footnote)
                     .foregroundColor(.secondary.opacity(settings.subtitleOnly ? 0.6 : 1))
             }
@@ -275,8 +315,8 @@ struct SettingsView: View {
     }
     
     private var subtitlesSection: some View {
-        settingsGroup(title: "Subtitles", systemImage: "captions.bubble") {
-            Toggle("Download subtitles", isOn: $settings.downloadSubtitles)
+        settingsGroup(title: "settings_section_subtitles", systemImage: "captions.bubble") {
+            Toggle("settings_toggle_download_subtitles", isOn: $settings.downloadSubtitles)
                 .toggleStyle(.switch)
                 .padding(.bottom, settings.downloadSubtitles ? 8 : 0)
                 .onChange(of: settings.downloadSubtitles) { oldValue, newValue in
@@ -287,28 +327,28 @@ struct SettingsView: View {
                 }
 
             if settings.downloadSubtitles {
-                settingsField(label: "Languages") {
-                    TextField("e.g. en,es,fr", text: $settings.subtitleLanguage)
+                settingsField(label: "settings_field_subtitle_languages") {
+                    TextField("settings_placeholder_language_examples", text: $settings.subtitleLanguage)
                         .textFieldStyle(.roundedBorder)
                 }
                 
-                settingsField(label: "Subtitle Format") {
-                    Picker("Subtitle Format", selection: $settings.subtitleFormat) {
-                        Text("SRT").tag("srt")
-                        Text("VTT").tag("vtt")
-                        Text("ASS").tag("ass")
+                settingsField(label: "settings_field_subtitle_format") {
+                    Picker("settings_picker_subtitle_format", selection: $settings.subtitleFormat) {
+                        Text("settings_option_subtitle_srt").tag("srt")
+                        Text("settings_option_subtitle_vtt").tag("vtt")
+                        Text("settings_option_subtitle_ass").tag("ass")
                     }
                     .pickerStyle(.segmented)
                 }
 
                 if !settings.audioOnly {
-                    Toggle("Embed subtitles into video", isOn: $settings.embedSubs)
+                    Toggle("settings_toggle_embed_subtitles", isOn: $settings.embedSubs)
                         .disabled(settings.subtitleOnly)
                 }
 
-                Toggle("Download auto-generated subtitles", isOn: $settings.writeAutoSubs)
+                Toggle("settings_toggle_download_auto_subtitles", isOn: $settings.writeAutoSubs)
 
-                Toggle("Subtitle only (skip media)", isOn: $settings.subtitleOnly)
+                Toggle("settings_toggle_subtitle_only", isOn: $settings.subtitleOnly)
                     .toggleStyle(.switch)
                     .onChange(of: settings.subtitleOnly) { oldValue, newValue in
                         guard oldValue != newValue else { return }
@@ -322,80 +362,86 @@ struct SettingsView: View {
     }
     
     private var metadataSection: some View {
-        settingsGroup(title: "Metadata & Thumbnails", systemImage: "tag") {
-            Toggle("Download thumbnail", isOn: $settings.downloadThumbnail)
+        settingsGroup(title: "settings_section_metadata", systemImage: "tag") {
+            Toggle("settings_toggle_download_thumbnail", isOn: $settings.downloadThumbnail)
             if !settings.audioOnly {
-                Toggle("Embed thumbnail in media file", isOn: $settings.embedThumbnail)
+                Toggle("settings_toggle_embed_thumbnail", isOn: $settings.embedThumbnail)
             }
-            Toggle("Save video description", isOn: $settings.writeDescription)
-            Toggle("Save info JSON", isOn: $settings.writeInfoJson)
+            Toggle("settings_toggle_save_description", isOn: $settings.writeDescription)
+            Toggle("settings_toggle_save_info_json", isOn: $settings.writeInfoJson)
         }
     }
     
     private var playlistSection: some View {
-        settingsGroup(title: "Playlists", systemImage: "text.badge.plus") {
-            Toggle("Download single video only", isOn: $settings.noPlaylist)
+        settingsGroup(title: "settings_section_playlists", systemImage: "text.badge.plus") {
+            Toggle("settings_toggle_single_video", isOn: $settings.noPlaylist)
             
-            settingsField(label: "Max downloads") {
-                TextField("Unlimited", text: $settings.maxDownloads)
+            settingsField(label: "settings_field_max_downloads") {
+                TextField("settings_placeholder_unlimited", text: $settings.maxDownloads)
                     .textFieldStyle(.roundedBorder)
             }
         }
     }
     
     private var networkSection: some View {
-        settingsGroup(title: "Network", systemImage: "network") {
-            settingsField(label: "Rate limit") {
-                TextField("e.g. 1M", text: $settings.rateLimit)
+        settingsGroup(title: "settings_section_network", systemImage: "network") {
+            settingsField(label: "settings_field_rate_limit") {
+                TextField("settings_placeholder_rate_limit", text: $settings.rateLimit)
                     .textFieldStyle(.roundedBorder)
             }
             
-            settingsField(label: "Retries") {
-                TextField("10", text: $settings.retries)
+            settingsField(label: "settings_field_retries") {
+                TextField("settings_placeholder_retries", text: $settings.retries)
                     .textFieldStyle(.roundedBorder)
             }
             
-            settingsField(label: "Proxy") {
-                TextField("http://proxy:port", text: $settings.proxy)
+            settingsField(label: "settings_field_proxy") {
+                TextField("settings_placeholder_proxy", text: $settings.proxy)
                     .textFieldStyle(.roundedBorder)
             }
             
-            settingsField(label: "User agent") {
-                TextField("Default", text: $settings.userAgent)
+            settingsField(label: "settings_field_user_agent") {
+                TextField("settings_placeholder_user_agent", text: $settings.userAgent)
                     .textFieldStyle(.roundedBorder)
             }
         }
     }
     
     private var loggingSection: some View {
-        settingsGroup(title: "Logging & Debug", systemImage: "terminal") {
-            Toggle("Enable verbose logging", isOn: $settings.enableVerboseLogging)
-            Toggle("Show raw output", isOn: $settings.showRawOutput)
-            Toggle("Log command invocations", isOn: $settings.logCommands)
+        settingsGroup(title: "settings_section_logging", systemImage: "terminal") {
+            Toggle("settings_toggle_verbose_logging", isOn: $settings.enableVerboseLogging)
+            Toggle("settings_toggle_show_raw_output", isOn: $settings.showRawOutput)
+            Toggle("settings_toggle_log_commands", isOn: $settings.logCommands)
             
-            Text("Verbose logging streams the full yt-dlp output to the log panels.")
+            Text("settings_text_verbose_logging_info")
                 .font(.footnote)
                 .foregroundColor(.secondary)
         }
     }
     
     private var authenticationSection: some View {
-        settingsGroup(title: "Authentication", systemImage: "lock") {
-            Toggle("Pass cookies through browser", isOn: $settings.useBrowserCookies)
+        settingsGroup(title: "settings_section_authentication", systemImage: "lock") {
+            Toggle("settings_toggle_pass_browser_cookies", isOn: $settings.useBrowserCookies)
                 .toggleStyle(.switch)
-                .help("Supported browsers: Safari, Brave, Google Chrome, Chromium, Microsoft Edge, Firefox, Opera, Vivaldi.")
+                .help("settings_browser_help")
 
             if settings.useBrowserCookies {
-                Text("Manual cookie input is disabled while pass-through is active.")
+                Text("settings_text_manual_cookie_disabled")
                     .font(.footnote)
                     .foregroundColor(.secondary)
             }
 
             if settings.useBrowserCookies {
-                settingsField(label: "Browser", footer: "yt-dlp will read cookies directly from the selected browser. Close the browser first for best results.") {
-                    Picker("Browser", selection: $settings.browserCookieSource) {
+                settingsField(
+                    label: "settings_field_browser",
+                    footer: String(
+                        localized: "settings_browser_footer",
+                        comment: "Explains browser cookie pass-through"
+                    )
+                ) {
+                    Picker("settings_picker_browser", selection: $settings.browserCookieSource) {
                         ForEach(browserCookieOptions, id: \.value) { option in
-                            Text(option.label).tag(option.value)
+                            Text(option.labelKey).tag(option.value)
                         }
                     }
                     .pickerStyle(.menu)
@@ -406,7 +452,7 @@ struct SettingsView: View {
                 Divider()
             }
 
-            Text("Cookies (Netscape format)")
+            Text("settings_text_cookies_title")
                 .font(.subheadline)
                 .fontWeight(.semibold)
                 .foregroundColor(.primary)
@@ -421,7 +467,7 @@ struct SettingsView: View {
                 .disabled(settings.useBrowserCookies)
             
             if settings.cookieData.isEmpty {
-                Text("Paste browser cookies exported in Netscape format.\nExample:\n# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t…")
+                Text("settings_text_cookies_placeholder")
                     .font(.footnote)
                     .foregroundColor(.secondary)
                     .disabled(settings.useBrowserCookies)
@@ -429,11 +475,11 @@ struct SettingsView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundColor(.green)
-                    Text("\(cookieCount) cookies loaded")
+                    Text(cookiesLoadedText)
                         .font(.footnote)
                         .foregroundColor(.secondary)
                     Spacer()
-                    Button("Clear") {
+                    Button("settings_clear_cookies_button") {
                         settings.cookieData = ""
                     }
                     .controlSize(.small)

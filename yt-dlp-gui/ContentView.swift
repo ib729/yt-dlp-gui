@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 import AppKit
 
 struct ContentView: View {
@@ -6,6 +7,23 @@ struct ContentView: View {
     @State private var settings = YtDlpSettings.load()
     @State private var showSettings = false
     @StateObject private var downloadManager = DownloadManager()
+
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+            ?? String(
+                localized: "content_header_version_unknown",
+                comment: "Fallback value when app version is unavailable"
+            )
+    }
+
+    private var progressLabelText: String {
+        let percentage = Int(downloadManager.progress * 100)
+        return String(
+            format: String(localized: "download_progress_format", comment: "Download progress percentage label"),
+            locale: Locale.current,
+            percentage
+        )
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -33,11 +51,19 @@ struct ContentView: View {
     private var headerView: some View {
         HStack {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("yt-dlp-gui")
+                Text("content_header_title")
                     .font(.title2)
                     .fontWeight(.semibold)
 
-                Text("v1.1.2")
+                Text(
+                    String(
+                        format: String(
+                            localized: "content_header_version_format",
+                            comment: "App version label with placeholder"
+                        ),
+                        appVersion
+                    )
+                )
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             }
@@ -45,7 +71,7 @@ struct ContentView: View {
             Spacer()
             
             Button(action: { showSettings = true }) {
-                Label("Settings", systemImage: "gear")
+                Label("content_header_settings", systemImage: "gear")
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(.borderless)
@@ -72,19 +98,19 @@ struct ContentView: View {
             
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 12) {
-                    Text("Session Log")
+                    Text("session_log_title")
                         .font(.headline)
                         .foregroundColor(.primary)
 
                     Spacer()
 
                     if !downloadManager.downloadLogs.isEmpty {
-                        Button("Copy") {
+                        Button("session_log_copy") {
                             copyLogsToPasteboard()
                         }
                         .controlSize(.small)
 
-                        Button("Clear") {
+                        Button("session_log_clear") {
                             downloadManager.clearLogs()
                         }
                         .controlSize(.small)
@@ -105,11 +131,11 @@ struct ContentView: View {
     
     private var urlInputSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Video/Playlist URLs")
+            Text("url_input_title")
                 .font(.headline)
                 .foregroundColor(.primary)
             
-            TextField("Enter video or playlist URL(s)...", text: $url)
+            TextField("url_input_placeholder", text: $url)
                 .textFieldStyle(.plain)
                 .font(.body)
                 .textContentType(.URL)
@@ -125,7 +151,7 @@ struct ContentView: View {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .stroke(Color(NSColor.separatorColor).opacity(0.3), lineWidth: 1)
                 )
-                .help("Accepts full video or playlist links separated by commas from YouTube or any yt-dlp supported site.")
+                .help("url_input_help")
                 .onSubmit {
                     let urls = normalizedUrls(from: url)
                     if !urls.isEmpty && !downloadManager.isDownloading {
@@ -161,7 +187,7 @@ struct ContentView: View {
         if downloadManager.isDownloading {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 12) {
-                    Text("Download Progress")
+                    Text("download_progress_title")
                         .font(.headline)
 
                     Spacer()
@@ -184,7 +210,7 @@ struct ContentView: View {
                 ProgressView(value: downloadManager.progress)
                     .progressViewStyle(.linear)
 
-                Text("\(Int(downloadManager.progress * 100))% complete")
+                Text(progressLabelText)
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -253,7 +279,7 @@ struct ContentView: View {
                 }
                 .frame(maxHeight: 200)
             } label: {
-                Label("Raw Output", systemImage: "chevron.left.slash.chevron.right")
+                Label("raw_output_title", systemImage: "chevron.left.slash.chevron.right")
             }
         }
     }
@@ -262,7 +288,7 @@ struct ContentView: View {
         HStack(spacing: 16) {
             if downloadManager.isDownloading {
                 Button(action: downloadManager.cancelDownload) {
-                    Text("Cancel")
+                    Text("cancel_button")
                         .font(.body.weight(.semibold))
                         .padding(.horizontal, 20)
                         .padding(.vertical, 13)
@@ -283,7 +309,7 @@ struct ContentView: View {
                 let isDisabled = parsedUrls.isEmpty
 
                 Button(action: { startDownload(with: parsedUrls) }) {
-                    Text("Download")
+                    Text("download_button")
                         .font(.body.weight(.semibold))
                         .padding(.horizontal, 24)
                         .padding(.vertical, 13)
@@ -338,11 +364,28 @@ struct ContentView: View {
         let ffmpegPath = downloadManager.findFfmpegPath()
         
         if ytdlpPath.isEmpty {
-            downloadManager.statusMessage = "⚠️ yt-dlp not found. Install it with: brew install yt-dlp"
+            let installCommand = "brew install yt-dlp"
+            downloadManager.statusMessage = String(
+                format: String(
+                    localized: "status_ytdlp_missing",
+                    comment: "Warns user yt-dlp is missing with install command placeholder"
+                ),
+                installCommand
+            )
         } else if ffmpegPath.isEmpty {
-            downloadManager.statusMessage = "⚠️ ffmpeg not found. Install it with: brew install ffmpeg"
+            let installCommand = "brew install ffmpeg"
+            downloadManager.statusMessage = String(
+                format: String(
+                    localized: "status_ffmpeg_missing",
+                    comment: "Warns user ffmpeg is missing with install command placeholder"
+                ),
+                installCommand
+            )
         } else {
-            downloadManager.statusMessage = "Ready to download"
+            downloadManager.statusMessage = String(
+                localized: "status_ready",
+                comment: "Status message when everything is ready"
+            )
         }
     }
 }
