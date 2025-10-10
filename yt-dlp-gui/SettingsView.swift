@@ -8,6 +8,7 @@ struct SettingsView: View {
     @State private var cookieCount: Int = 0
     @State private var isYtdlpMissing: Bool = false
     @State private var isFfmpegMissing: Bool = false
+    @State private var showLanguageRestartNotice: Bool = false
     private let browserCookieOptions: [(labelKey: LocalizedStringKey, value: String)] = [
         ("browser_option_safari", "safari"),
         ("browser_option_brave", "brave"),
@@ -48,6 +49,9 @@ struct SettingsView: View {
             cookieCount
         )
     }
+    private var languageOptions: [LocalizationManager.LanguageOption] {
+        LocalizationManager.shared.supportedLanguages
+    }
     
     init(settings: Binding<YtDlpSettings>) {
         _settings = settings
@@ -71,6 +75,7 @@ struct SettingsView: View {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 24) {
                     generalSection
+                    applicationSection
                     videoSection
                     audioSection
                     postProcessingSection
@@ -103,6 +108,8 @@ struct SettingsView: View {
         }
         .frame(minWidth: 680, minHeight: 760)
         .onAppear {
+            showLanguageRestartNotice = false
+            settings.preferredLanguageCode = LocalizationManager.shared.normalized(code: settings.preferredLanguageCode)
             refreshBinaryAvailability()
             refreshCookieCount()
         }
@@ -114,6 +121,15 @@ struct SettingsView: View {
         }
         .onChange(of: settings.cookieData) { _, newValue in
             cookieCount = SettingsView.countCookies(in: newValue)
+        }
+        .onChange(of: settings.preferredLanguageCode) { _, newValue in
+            let normalized = LocalizationManager.shared.normalized(code: newValue)
+            if normalized != newValue {
+                settings.preferredLanguageCode = normalized
+                return
+            }
+            LocalizationManager.shared.apply(languageCode: normalized)
+            showLanguageRestartNotice = true
         }
     }
 
@@ -169,6 +185,25 @@ struct SettingsView: View {
                     .font(.footnote)
                     .foregroundColor(.secondary)
                     .padding(.top, 2)
+            }
+        }
+    }
+    
+    private var applicationSection: some View {
+        settingsGroup(title: "settings_section_application", systemImage: "globe") {
+            settingsField(label: "settings_field_language") {
+                Picker("settings_picker_language", selection: $settings.preferredLanguageCode) {
+                    ForEach(languageOptions) { option in
+                        Text(option.labelKey).tag(option.code)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+
+            if showLanguageRestartNotice {
+                Text("settings_language_restart")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
             }
         }
     }

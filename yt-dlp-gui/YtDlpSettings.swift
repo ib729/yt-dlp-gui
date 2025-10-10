@@ -39,6 +39,7 @@ struct YtDlpSettings: Codable {
     
     var useBrowserCookies: Bool = false
     var browserCookieSource: String = "safari"
+    var preferredLanguageCode: String = ""
     
     func save() {
         if let encoded = try? JSONEncoder().encode(self) {
@@ -47,10 +48,23 @@ struct YtDlpSettings: Codable {
     }
     
     static func load() -> YtDlpSettings {
+        let decodedSettings: YtDlpSettings
         if let data = UserDefaults.standard.data(forKey: "YtDlpSettings"),
            let settings = try? JSONDecoder().decode(YtDlpSettings.self, from: data) {
-            return settings
+            decodedSettings = settings
+        } else {
+            decodedSettings = YtDlpSettings()
         }
-        return YtDlpSettings()
+
+        var adjusted = decodedSettings
+        let storedOverride = LocalizationManager.shared.storedLanguageCode()
+        if adjusted.preferredLanguageCode.isEmpty, !storedOverride.isEmpty {
+            adjusted.preferredLanguageCode = storedOverride
+        }
+
+        if !adjusted.preferredLanguageCode.isEmpty {
+            LocalizationManager.shared.apply(languageCode: adjusted.preferredLanguageCode)
+        }
+        return adjusted
     }
 }

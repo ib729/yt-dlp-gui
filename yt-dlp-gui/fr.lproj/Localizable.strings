@@ -34,7 +34,7 @@
 "settings_section_application" = "Application";
 "settings_field_language" = "Language";
 "settings_picker_language" = "Language";
-"settings_language_option_system" = "System Default";
+"settings_language_option_system" = "Follow System";
 "settings_language_option_english" = "English";
 "settings_language_option_chinese_simplified" = "Simplified Chinese";
 "settings_language_restart" = "Language changes take effect after restarting the app.";
@@ -147,7 +147,7 @@
 "browser_option_opera" = "Opera";
 "browser_option_vivaldi" = "Vivaldi";
 "settings_text_cookies_title" = "Cookies (Netscape format)";
-"settings_text_cookies_placeholder" = "";
+"settings_text_cookies_placeholder" = "Paste browser cookies exported in Netscape format.\\nExample:\\n# Netscape HTTP Cookie File\\n.youtube.com\\tTRUE\\t/\\tTRUE\\t…";
 "settings_clear_cookies_button" = "Clear";
 
 /* Download Manager Status */

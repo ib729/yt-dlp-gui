@@ -31,6 +31,13 @@
 "settings_cancel" = "取消";
 "settings_save" = "保存";
 "settings_section_general" = "常规";
+"settings_section_application" = "应用";
+"settings_field_language" = "界面语言";
+"settings_picker_language" = "界面语言";
+"settings_language_option_system" = "跟随系统";
+"settings_language_option_english" = "英语";
+"settings_language_option_chinese_simplified" = "简体中文";
+"settings_language_restart" = "语言更改将在应用重新启动后生效。";
 "settings_field_output_directory" = "输出目录";
 "settings_output_placeholder" = "~/Downloads";
 "settings_browse_button" = "浏览";
