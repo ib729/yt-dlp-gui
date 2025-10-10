@@ -105,11 +105,11 @@ struct ContentView: View {
     
     private var urlInputSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Video/Playlist URL")
+            Text("Video/Playlist URLs")
                 .font(.headline)
                 .foregroundColor(.primary)
             
-            TextField("Enter video or playlist URL...", text: $url)
+            TextField("Enter video or playlist URL(s)...", text: $url)
                 .textFieldStyle(.plain)
                 .font(.body)
                 .textContentType(.URL)
@@ -125,10 +125,11 @@ struct ContentView: View {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .stroke(Color(NSColor.separatorColor).opacity(0.3), lineWidth: 1)
                 )
-                .help("Accepts full video or playlist links from YouTube or any yt-dlp supported site.")
+                .help("Accepts full video or playlist links separated by commas from YouTube or any yt-dlp supported site.")
                 .onSubmit {
-                    if !url.isEmpty && !downloadManager.isDownloading {
-                        startDownload()
+                    let urls = normalizedUrls(from: url)
+                    if !urls.isEmpty && !downloadManager.isDownloading {
+                        startDownload(with: urls)
                     }
                 }
 
@@ -278,9 +279,10 @@ struct ContentView: View {
                 .buttonStyle(.plain)
                 .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             } else {
-                let isDisabled = url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                let parsedUrls = normalizedUrls(from: url)
+                let isDisabled = parsedUrls.isEmpty
 
-                Button(action: startDownload) {
+                Button(action: { startDownload(with: parsedUrls) }) {
                     Text("Download")
                         .font(.body.weight(.semibold))
                         .padding(.horizontal, 24)
@@ -318,11 +320,17 @@ struct ContentView: View {
         pasteboard.setString(joinedLogs, forType: .string)
     }
     
-    private func startDownload() {
-        let trimmedUrl = url.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedUrl.isEmpty else { return }
+    private func startDownload(with urls: [String]) {
+        guard !urls.isEmpty else { return }
         
-        downloadManager.downloadVideo(url: trimmedUrl, settings: settings)
+        downloadManager.downloadVideos(urls: urls, settings: settings)
+    }
+
+    private func normalizedUrls(from rawValue: String) -> [String] {
+        return rawValue
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
     
     private func checkYtdlpInstallation() {

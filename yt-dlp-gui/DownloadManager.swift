@@ -246,7 +246,7 @@ class DownloadManager: ObservableObject {
         }
     }
     
-    private func buildDownloadArguments(for url: String, settings: YtDlpSettings) -> [String] {
+    private func buildDownloadArguments(for urls: [String], settings: YtDlpSettings) -> [String] {
         var args: [String] = []
         
         let outputPath = settings.outputPath.isEmpty ? "~/Downloads" : settings.outputPath
@@ -413,7 +413,9 @@ class DownloadManager: ObservableObject {
         args.append("--print")
         args.append("after_move:filepath")
         
-        args.append(url)
+        for url in urls {
+            args.append(url)
+        }
         
         if settings.logCommands {
             addLog("Download command: yt-dlp \(args.joined(separator: " "))")
@@ -1078,8 +1080,16 @@ class DownloadManager: ObservableObject {
         }
     }
     
-    func downloadVideo(url: String, settings: YtDlpSettings) {
+    func downloadVideos(urls: [String], settings: YtDlpSettings) {
         guard !isDownloading else { return }
+
+        let sanitizedUrls = urls
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        guard !sanitizedUrls.isEmpty else { return }
+
+        let downloadCount = sanitizedUrls.count
 
         var effectiveSettings = settings
         effectiveSettings.audioCodec = mapAudioCodec(for: settings.audioFormat)
@@ -1111,17 +1121,26 @@ class DownloadManager: ObservableObject {
             return
         }
 
-        let args = buildDownloadArguments(for: url, settings: effectiveSettings)
+        let args = buildDownloadArguments(for: sanitizedUrls, settings: effectiveSettings)
         
         DispatchQueue.main.async {
             self.isDownloading = true
-            self.statusMessage = "Starting download..."
+            if downloadCount == 1 {
+                self.statusMessage = "Starting download..."
+            } else {
+                self.statusMessage = "Starting downloads (\(downloadCount) items)..."
+            }
             self.progress = 0.0
             self.downloadSpeed = ""
             self.eta = ""
         }
         
-        addLog("Starting download for URL: \(url)")
+        if downloadCount == 1, let singleURL = sanitizedUrls.first {
+            addLog("Starting download for URL: \(singleURL)")
+        } else {
+            addLog("Starting download batch for \(downloadCount) URLs")
+            addLog("Targets: \(sanitizedUrls.joined(separator: ", "))")
+        }
         addLog("Using yt-dlp at: \(ytdlpPath)")
         
         DispatchQueue.global(qos: .userInitiated).async {
@@ -1185,6 +1204,10 @@ class DownloadManager: ObservableObject {
                 self.addLog("Failed to start download: \(error.localizedDescription)")
             }
         }
+    }
+    
+    func downloadVideo(url: String, settings: YtDlpSettings) {
+        downloadVideos(urls: [url], settings: settings)
     }
     
     private func parseOutput(_ output: String) {
