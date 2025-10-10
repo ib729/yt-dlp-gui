@@ -4,7 +4,9 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     @Binding var settings: YtDlpSettings
     @Environment(\.presentationMode) var presentationMode
-    @StateObject private var downloadManager = DownloadManager()
+    @State private var cookieCount: Int = 0
+    @State private var isYtdlpMissing: Bool = false
+    @State private var isFfmpegMissing: Bool = false
     private let browserCookieOptions: [(label: String, value: String)] = [
         ("Safari", "safari"),
         ("Brave", "brave"),
@@ -15,6 +17,23 @@ struct SettingsView: View {
         ("Opera", "opera"),
         ("Vivaldi", "vivaldi")
     ]
+    
+    init(settings: Binding<YtDlpSettings>) {
+        _settings = settings
+        _cookieCount = State(initialValue: SettingsView.countCookies(in: settings.wrappedValue.cookieData))
+        _isYtdlpMissing = State(initialValue: SettingsView.binaryMissing("yt-dlp", customPath: settings.wrappedValue.customYtdlpPath))
+        _isFfmpegMissing = State(initialValue: SettingsView.binaryMissing("ffmpeg", customPath: settings.wrappedValue.customFfmpegPath))
+    }
+
+    private func refreshBinaryAvailability() {
+        isYtdlpMissing = SettingsView.binaryMissing("yt-dlp", customPath: settings.customYtdlpPath)
+        isFfmpegMissing = SettingsView.binaryMissing("ffmpeg", customPath: settings.customFfmpegPath)
+    }
+
+    private func refreshCookieCount() {
+        cookieCount = SettingsView.countCookies(in: settings.cookieData)
+    }
+
     
     var body: some View {
         NavigationView {
@@ -52,6 +71,19 @@ struct SettingsView: View {
             }
         }
         .frame(minWidth: 680, minHeight: 760)
+        .onAppear {
+            refreshBinaryAvailability()
+            refreshCookieCount()
+        }
+        .onChange(of: settings.customYtdlpPath) { _, newValue in
+            isYtdlpMissing = SettingsView.binaryMissing("yt-dlp", customPath: newValue)
+        }
+        .onChange(of: settings.customFfmpegPath) { _, newValue in
+            isFfmpegMissing = SettingsView.binaryMissing("ffmpeg", customPath: newValue)
+        }
+        .onChange(of: settings.cookieData) { _, newValue in
+            cookieCount = SettingsView.countCookies(in: newValue)
+        }
     }
 
     @ViewBuilder
@@ -101,16 +133,6 @@ struct SettingsView: View {
         }
     }
 
-    private var loadedCookieCount: Int {
-        settings.cookieData
-            .components(separatedBy: .newlines)
-            .filter { line in
-                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                return !trimmed.isEmpty && !trimmed.hasPrefix("#")
-            }
-            .count
-    }
-
     private var generalSection: some View {
         settingsGroup(title: "General", systemImage: "gearshape") {
             settingsField(label: "Output Directory") {
@@ -125,7 +147,7 @@ struct SettingsView: View {
             
             settingsField(
                 label: "Custom yt-dlp Path",
-                footer: binaryMissing("yt-dlp", customPath: settings.customYtdlpPath) ? "yt-dlp powers downloads. Install with: brew install yt-dlp" : nil
+                footer: isYtdlpMissing ? "yt-dlp powers downloads. Install with: brew install yt-dlp" : nil
             ) {
                 HStack(spacing: 12) {
                     TextField("Auto-detect", text: $settings.customYtdlpPath)
@@ -138,7 +160,7 @@ struct SettingsView: View {
             
             settingsField(
                 label: "Custom FFmpeg Path",
-                footer: binaryMissing("ffmpeg", customPath: settings.customFfmpegPath) ? "FFmpeg is required for audio extraction and video processing. Install with: brew install ffmpeg" : nil
+                footer: isFfmpegMissing ? "FFmpeg is required for audio extraction and video processing. Install with: brew install ffmpeg" : nil
             ) {
                 HStack(spacing: 12) {
                     TextField("Auto-detect", text: $settings.customFfmpegPath)
@@ -407,7 +429,7 @@ struct SettingsView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundColor(.green)
-                    Text("\(loadedCookieCount) cookies loaded")
+                    Text("\(cookieCount) cookies loaded")
                         .font(.footnote)
                         .foregroundColor(.secondary)
                     Spacer()
@@ -463,7 +485,7 @@ struct SettingsView: View {
         }
     }
     
-    private func binaryMissing(_ name: String, customPath: String) -> Bool {
+    private static func binaryMissing(_ name: String, customPath: String) -> Bool {
         let fm = FileManager.default
         let resolvedCustom = expandTilde(customPath)
         if !resolvedCustom.isEmpty, fm.isExecutableFile(atPath: resolvedCustom) {
@@ -498,8 +520,19 @@ struct SettingsView: View {
         return true
     }
 
-    private func expandTilde(_ path: String) -> String {
+    private static func expandTilde(_ path: String) -> String {
         let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "" : (trimmed as NSString).expandingTildeInPath
+    }
+
+    private static func countCookies(in cookieData: String) -> Int {
+        var count = 0
+        cookieData.enumerateLines { line, _ in
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty && !trimmed.hasPrefix("#") {
+                count += 1
+            }
+        }
+        return count
     }
 }
