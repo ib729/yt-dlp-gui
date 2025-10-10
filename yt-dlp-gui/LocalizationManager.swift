@@ -24,7 +24,14 @@ final class LocalizationManager {
     let supportedLanguages: [LanguageOption] = [
         LanguageOption(code: "", labelKey: "settings_language_option_system"),
         LanguageOption(code: "en", labelKey: "settings_language_option_english"),
-        LanguageOption(code: "zh-Hans", labelKey: "settings_language_option_chinese_simplified")
+        LanguageOption(code: "de", labelKey: "settings_language_option_german"),
+        LanguageOption(code: "fr", labelKey: "settings_language_option_french"),
+        LanguageOption(code: "es", labelKey: "settings_language_option_spanish"),
+        LanguageOption(code: "ru", labelKey: "settings_language_option_russian"),
+        LanguageOption(code: "ja", labelKey: "settings_language_option_japanese"),
+        LanguageOption(code: "hi", labelKey: "settings_language_option_hindi"),
+        LanguageOption(code: "zh-Hans", labelKey: "settings_language_option_chinese_simplified"),
+        LanguageOption(code: "zh-Hant", labelKey: "settings_language_option_chinese_traditional")
     ]
 
     /// Ensures the provided code maps to one of the supported options.

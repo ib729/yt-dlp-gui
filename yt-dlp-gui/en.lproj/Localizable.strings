@@ -25,6 +25,7 @@
 "about_description_fallback" = "A native SwiftUI interface for yt-dlp.";
 "about_version_label" = "Version";
 "about_github_button" = "GitHub";
+"about_donate_button" = "Donate";
 
 /* Settings */
 "settings_title" = "Settings";
@@ -36,7 +37,14 @@
 "settings_picker_language" = "Language";
 "settings_language_option_system" = "System Default";
 "settings_language_option_english" = "English";
+"settings_language_option_german" = "German";
+"settings_language_option_french" = "French";
+"settings_language_option_spanish" = "Spanish";
+"settings_language_option_russian" = "Russian";
+"settings_language_option_japanese" = "Japanese";
+"settings_language_option_hindi" = "Hindi";
 "settings_language_option_chinese_simplified" = "Simplified Chinese";
+"settings_language_option_chinese_traditional" = "Traditional Chinese";
 "settings_language_restart" = "Language changes take effect after restarting the app.";
 "settings_field_output_directory" = "Output Directory";
 "settings_output_placeholder" = "~/Downloads";
@@ -147,7 +155,7 @@
 "browser_option_opera" = "Opera";
 "browser_option_vivaldi" = "Vivaldi";
 "settings_text_cookies_title" = "Cookies (Netscape format)";
-"settings_text_cookies_placeholder" = "";
+"settings_text_cookies_placeholder" = "Paste browser cookies exported in Netscape format.\\nExample:\\n# Netscape HTTP Cookie File\\n.youtube.com\\tTRUE\\t/\\tTRUE\\t…";
 "settings_clear_cookies_button" = "Clear";
 
 /* Download Manager Status */

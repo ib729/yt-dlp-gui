@@ -6,6 +6,7 @@ struct AboutWindowInfo {
     let description: String
     let version: String
     let projectURL: URL
+    let donationURL: URL
 
     static func fromBundle() -> AboutWindowInfo {
         let bundle = Bundle.main
@@ -31,13 +32,16 @@ struct AboutWindowInfo {
             ?? info["GitRepositoryURL"] as? String
             ?? fallbackURL.absoluteString
 
-        let projectURL = URL(string: repositoryString) ?? fallbackURL
+        let projectURL = URL(string: "https://ivanbelousov.com/donate") ?? fallbackURL
+        let donationString = info["DonationURL"] as? String
+        let donationURL = donationString.flatMap { URL(string: $0) } ?? projectURL
 
         return AboutWindowInfo(
             appName: appName,
             description: description,
             version: version,
-            projectURL: projectURL
+            projectURL: projectURL,
+            donationURL: donationURL
         )
     }
 }
@@ -46,7 +50,8 @@ struct AboutAppView: View {
     let info: AboutWindowInfo
 
     @State private var isVisible = false
-    @State private var isHoveringButton = false
+    @State private var isHoveringGitHub = false
+    @State private var isHoveringDonate = false
     @Environment(\.openURL) private var openURL
 
     var body: some View {
@@ -102,23 +107,18 @@ struct AboutAppView: View {
                     .frame(height: 24)
 
                 // GitHub button
-                Button {
-                    openURL(info.projectURL)
-                } label: {
-                    Text("about_github_button")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(Color(white:0.85))
-                        .frame(width: 70, height: 24)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(Color(white: isHoveringButton ? 0.3 : 0.25))
-                        )
-                }
-                .buttonStyle(.plain)
-                .onHover { hovering in
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        isHoveringButton = hovering
-                    }
+                HStack(spacing: 12) {
+                    button(
+                        titleKey: "about_github_button",
+                        isHovering: $isHoveringGitHub,
+                        action: { openURL(info.projectURL) }
+                    )
+
+                    button(
+                        titleKey: "about_donate_button",
+                        isHovering: $isHoveringDonate,
+                        action: { openURL(info.donationURL) }
+                    )
                 }
 
                 Spacer()
@@ -133,6 +133,29 @@ struct AboutAppView: View {
             }
         }
         .frame(width: 300, height: 320)
+    }
+
+    private func button(
+        titleKey: LocalizedStringKey,
+        isHovering: Binding<Bool>,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(titleKey)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Color(white: 0.85))
+                .frame(width: 90, height: 24)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color(white: isHovering.wrappedValue ? 0.3 : 0.25))
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovering.wrappedValue = hovering
+            }
+        }
     }
 }
 
