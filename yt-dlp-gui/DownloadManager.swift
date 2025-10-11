@@ -150,6 +150,49 @@ class DownloadManager: ObservableObject {
         return (path as NSString).expandingTildeInPath
     }
     
+    private func makeExecutionEnvironment(customYtDlpPath: String) -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        let homeDirectory = FileManager.default.homeDirectoryForCurrentUser.path
+        environment["HOME"] = homeDirectory
+
+        let defaultSearchPaths = [
+            (customYtDlpPath as NSString).deletingLastPathComponent,
+            "/opt/homebrew/bin",
+            "/opt/homebrew/sbin",
+            "/usr/local/bin",
+            "/usr/local/sbin",
+            "/usr/bin",
+            "/usr/sbin",
+            "/bin",
+            "/sbin",
+            "\(homeDirectory)/.local/bin"
+        ]
+
+        let existingPathComponents = (environment["PATH"] ?? "")
+            .split(separator: ":")
+            .map { String($0) }
+
+        var combinedPaths: [String] = []
+        var visited = Set<String>()
+
+        for path in defaultSearchPaths + existingPathComponents {
+            guard !path.isEmpty else { continue }
+            if visited.insert(path).inserted {
+                combinedPaths.append(path)
+            }
+        }
+
+        environment["PATH"] = combinedPaths.joined(separator: ":")
+        if environment["LC_ALL"] == nil {
+            environment["LC_ALL"] = "en_US.UTF-8"
+        }
+        if environment["LANG"] == nil {
+            environment["LANG"] = "en_US.UTF-8"
+        }
+
+        return environment
+    }
+    
     private func addLog(_ message: String) {
         let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         let logEntry = "[\(timestamp)] \(message)"
@@ -1201,6 +1244,11 @@ class DownloadManager: ObservableObject {
             self.process = Process()
             self.process?.executableURL = URL(fileURLWithPath: ytdlpPath)
             self.process?.arguments = args
+            let executionEnvironment = self.makeExecutionEnvironment(customYtDlpPath: ytdlpPath)
+            self.process?.environment = executionEnvironment
+            if effectiveSettings.enableVerboseLogging {
+                self.addLog("Using PATH for yt-dlp: \(executionEnvironment["PATH"] ?? "")")
+            }
             
             let pipe = Pipe()
             self.process?.standardOutput = pipe
