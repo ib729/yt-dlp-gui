@@ -1,5 +1,3 @@
-/* 简体中文本地化 */
-
 /* ContentView */
 "content_header_title" = "yt-dlp-gui";
 "content_header_version_format" = "版本 %@";

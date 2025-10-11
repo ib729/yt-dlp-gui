@@ -1,5 +1,3 @@
-/* Localizable strings for English (Base) */
-
 /* ContentView */
 "content_header_title" = "yt-dlp-gui";
 "content_header_version_format" = "v%@";
