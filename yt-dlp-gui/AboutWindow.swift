@@ -12,6 +12,9 @@ struct AboutWindowInfo {
         let bundle = Bundle.main
         let info = bundle.infoDictionary ?? [:]
 
+        let fallbackProjectURL = URL(string: "https://github.com/ib729/yt-dlp-gui")!
+        let fallbackDonationURL = URL(string: "https://ivanbelousov.com/donate")!
+
         let appName = info["CFBundleDisplayName"] as? String
             ?? info["CFBundleName"] as? String
             ?? String(
@@ -27,14 +30,13 @@ struct AboutWindowInfo {
 
         let version = info["CFBundleShortVersionString"] as? String ?? "—"
 
-        let fallbackURL = URL(string: "https://github.com/ib729/yt-dlp-gui")!
         let repositoryString = info["RepositoryURL"] as? String
             ?? info["GitRepositoryURL"] as? String
-            ?? fallbackURL.absoluteString
+            ?? fallbackProjectURL.absoluteString
 
-        let projectURL = URL(string: "https://ivanbelousov.com/donate") ?? fallbackURL
         let donationString = info["DonationURL"] as? String
-        let donationURL = donationString.flatMap { URL(string: $0) } ?? projectURL
+        let projectURL = URL(string: repositoryString) ?? fallbackProjectURL
+        let donationURL = donationString.flatMap { URL(string: $0) } ?? fallbackDonationURL
 
         return AboutWindowInfo(
             appName: appName,

@@ -1,5 +1,3 @@
-/* 日本語ローカライズ */
-
 /* ContentView */
 "content_header_title" = "yt-dlp-gui";
 "content_header_version_format" = "v%@";
@@ -36,15 +34,15 @@
 "settings_field_language" = "言語";
 "settings_picker_language" = "言語";
 "settings_language_option_system" = "システムの言語に従う";
-"settings_language_option_english" = "英語";
-"settings_language_option_german" = "ドイツ語";
-"settings_language_option_french" = "フランス語";
-"settings_language_option_spanish" = "スペイン語";
-"settings_language_option_russian" = "ロシア語";
+"settings_language_option_english" = "English";
+"settings_language_option_german" = "Deutsch";
+"settings_language_option_french" = "Français";
+"settings_language_option_spanish" = "Español";
+"settings_language_option_russian" = "Русский";
 "settings_language_option_japanese" = "日本語";
-"settings_language_option_hindi" = "ヒンディー語";
-"settings_language_option_chinese_simplified" = "簡体字中国語";
-"settings_language_option_chinese_traditional" = "繁体字中国語";
+"settings_language_option_hindi" = "हिन्दी";
+"settings_language_option_chinese_simplified" = "简体中文";
+"settings_language_option_chinese_traditional" = "正體中文";
 "settings_language_restart" = "言語を変更するとアプリ再起動後に反映されます。";
 "settings_field_output_directory" = "出力フォルダ";
 "settings_output_placeholder" = "~/Downloads";
@@ -155,7 +153,6 @@
 "browser_option_opera" = "Opera";
 "browser_option_vivaldi" = "Vivaldi";
 "settings_text_cookies_title" = "Cookie（Netscape 形式）";
-"settings_text_cookies_placeholder" = "Netscape 形式で書き出したブラウザー Cookie を貼り付けてください。\\n例:\\n# Netscape HTTP Cookie File\\n.youtube.com\\tTRUE\\t/\\tTRUE\\t…";
 "settings_clear_cookies_button" = "クリア";
 
 /* Download Manager Status */

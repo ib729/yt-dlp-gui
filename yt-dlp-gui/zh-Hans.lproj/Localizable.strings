@@ -18,7 +18,7 @@
 "download_button" = "下载";
 "status_ytdlp_missing" = "⚠️ 未找到 yt-dlp。请通过执行：%@ 安装。";
 "status_ffmpeg_missing" = "⚠️ 未找到 ffmpeg。请通过执行：%@ 安装。";
-"status_ready" = "可以开始下载";
+"status_ready" = "下载已就绪";
 
 /* About Window */
 "about_app_name_fallback" = "yt-dlp-gui";
@@ -36,15 +36,15 @@
 "settings_field_language" = "界面语言";
 "settings_picker_language" = "界面语言";
 "settings_language_option_system" = "跟随系统";
-"settings_language_option_english" = "英语";
-"settings_language_option_german" = "德语";
-"settings_language_option_french" = "法语";
-"settings_language_option_spanish" = "西班牙语";
-"settings_language_option_russian" = "俄语";
-"settings_language_option_japanese" = "日语";
-"settings_language_option_hindi" = "印地语";
+"settings_language_option_english" = "English";
+"settings_language_option_german" = "Deutsch";
+"settings_language_option_french" = "Français";
+"settings_language_option_spanish" = "Español";
+"settings_language_option_russian" = "Русский";
+"settings_language_option_japanese" = "日本語";
+"settings_language_option_hindi" = "हिन्दी";
 "settings_language_option_chinese_simplified" = "简体中文";
-"settings_language_option_chinese_traditional" = "繁体中文";
+"settings_language_option_chinese_traditional" = "正體中文";
 "settings_language_restart" = "语言更改将在应用重新启动后生效。";
 "settings_field_output_directory" = "输出目录";
 "settings_output_placeholder" = "~/Downloads";
@@ -155,7 +155,6 @@
 "browser_option_opera" = "Opera";
 "browser_option_vivaldi" = "Vivaldi";
 "settings_text_cookies_title" = "Cookie（Netscape 格式）";
-"settings_text_cookies_placeholder" = "将导出的 Netscape 格式浏览器 Cookie 粘贴在此。\\n示例:\\n# Netscape HTTP Cookie File\\n.youtube.com\\tTRUE\\t/\\tTRUE\\t…";
 "settings_clear_cookies_button" = "清除";
 
 /* Download Manager Status */

@@ -34,15 +34,15 @@
 "settings_field_language" = "語言";
 "settings_picker_language" = "語言";
 "settings_language_option_system" = "跟隨系統";
-"settings_language_option_english" = "英文";
-"settings_language_option_german" = "德文";
-"settings_language_option_french" = "法文";
-"settings_language_option_spanish" = "西班牙文";
-"settings_language_option_russian" = "俄文";
-"settings_language_option_japanese" = "日文";
-"settings_language_option_hindi" = "印地語";
-"settings_language_option_chinese_simplified" = "簡體中文";
-"settings_language_option_chinese_traditional" = "繁體中文";
+"settings_language_option_english" = "English";
+"settings_language_option_german" = "Deutsch";
+"settings_language_option_french" = "Français";
+"settings_language_option_spanish" = "Español";
+"settings_language_option_russian" = "Русский";
+"settings_language_option_japanese" = "日本語";
+"settings_language_option_hindi" = "हिन्दी";
+"settings_language_option_chinese_simplified" = "简体中文";
+"settings_language_option_chinese_traditional" = "正體中文";
 "settings_language_restart" = "重新啟動 App 後語言變更才會生效。";
 "settings_field_output_directory" = "輸出資料夾";
 "settings_output_placeholder" = "~/Downloads";
@@ -153,7 +153,6 @@
 "browser_option_opera" = "Opera";
 "browser_option_vivaldi" = "Vivaldi";
 "settings_text_cookies_title" = "Cookie（Netscape 格式）";
-"settings_text_cookies_placeholder" = "將瀏覽器導出的 Netscape 格式 Cookie 貼在此處。\\n範例：\\n# Netscape HTTP Cookie File\\n.youtube.com\\tTRUE\\t/\\tTRUE\\t…";
 "settings_clear_cookies_button" = "清除";
 
 /* Download Manager Status */

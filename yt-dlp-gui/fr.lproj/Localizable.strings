@@ -1,5 +1,3 @@
-/* Localisation française */
-
 /* ContentView */
 "content_header_title" = "yt-dlp-gui";
 "content_header_version_format" = "v%@";
@@ -36,15 +34,15 @@
 "settings_field_language" = "Langue";
 "settings_picker_language" = "Langue";
 "settings_language_option_system" = "Suivre la langue du système";
-"settings_language_option_english" = "Anglais";
-"settings_language_option_german" = "Allemand";
+"settings_language_option_english" = "English";
+"settings_language_option_german" = "Deutsch";
 "settings_language_option_french" = "Français";
-"settings_language_option_spanish" = "Espagnol";
-"settings_language_option_russian" = "Russe";
-"settings_language_option_japanese" = "Japonais";
-"settings_language_option_hindi" = "Hindi";
-"settings_language_option_chinese_simplified" = "Chinois simplifié";
-"settings_language_option_chinese_traditional" = "Chinois traditionnel";
+"settings_language_option_spanish" = "Español";
+"settings_language_option_russian" = "Русский";
+"settings_language_option_japanese" = "日本語";
+"settings_language_option_hindi" = "हिन्दी";
+"settings_language_option_chinese_simplified" = "简体中文";
+"settings_language_option_chinese_traditional" = "正體中文";
 "settings_language_restart" = "Les modifications de langue prendront effet après le redémarrage de l’application.";
 "settings_field_output_directory" = "Dossier de sortie";
 "settings_output_placeholder" = "~/Downloads";
@@ -155,7 +153,6 @@
 "browser_option_opera" = "Opera";
 "browser_option_vivaldi" = "Vivaldi";
 "settings_text_cookies_title" = "Cookies (format Netscape)";
-"settings_text_cookies_placeholder" = "Collez ici les cookies du navigateur exportés au format Netscape.\\nExemple :\\n# Netscape HTTP Cookie File\\n.youtube.com\\tTRUE\\t/\\tTRUE\\t…";
 "settings_clear_cookies_button" = "Effacer";
 
 /* Download Manager Status */

@@ -501,12 +501,7 @@ struct SettingsView: View {
                 )
                 .disabled(settings.useBrowserCookies)
             
-            if settings.cookieData.isEmpty {
-                Text("settings_text_cookies_placeholder")
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
-                    .disabled(settings.useBrowserCookies)
-            } else {
+            if !settings.cookieData.isEmpty {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundColor(.green)

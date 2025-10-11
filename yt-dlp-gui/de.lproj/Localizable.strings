@@ -34,15 +34,15 @@
 "settings_field_language" = "Sprache";
 "settings_picker_language" = "Sprache";
 "settings_language_option_system" = "Systemsprache";
-"settings_language_option_english" = "Englisch";
+"settings_language_option_english" = "English";
 "settings_language_option_german" = "Deutsch";
-"settings_language_option_french" = "Französisch";
-"settings_language_option_spanish" = "Spanisch";
-"settings_language_option_russian" = "Russisch";
-"settings_language_option_japanese" = "Japanisch";
-"settings_language_option_hindi" = "Hindi";
-"settings_language_option_chinese_simplified" = "Chinesisch (vereinfacht)";
-"settings_language_option_chinese_traditional" = "Chinesisch (traditionell)";
+"settings_language_option_french" = "Français";
+"settings_language_option_spanish" = "Español";
+"settings_language_option_russian" = "Русский";
+"settings_language_option_japanese" = "日本語";
+"settings_language_option_hindi" = "हिन्दी";
+"settings_language_option_chinese_simplified" = "简体中文";
+"settings_language_option_chinese_traditional" = "正體中文";
 "settings_language_restart" = "Sprachänderungen werden nach einem Neustart der App wirksam.";
 "settings_field_output_directory" = "Ausgabeverzeichnis";
 "settings_output_placeholder" = "~/Downloads";
@@ -153,7 +153,6 @@
 "browser_option_opera" = "Opera";
 "browser_option_vivaldi" = "Vivaldi";
 "settings_text_cookies_title" = "Cookies (Netscape-Format)";
-"settings_text_cookies_placeholder" = "Browser-Cookies im Netscape-Format hier einfügen.\\nBeispiel:\\n# Netscape HTTP Cookie File\\n.youtube.com\\tTRUE\\t/\\tTRUE\\t…";
 "settings_clear_cookies_button" = "Leeren";
 
 /* Download Manager Status */
