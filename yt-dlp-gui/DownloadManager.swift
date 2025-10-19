@@ -1711,7 +1711,9 @@ class DownloadManager: ObservableObject {
             }
         }
         
-        if !foundProgress && settings?.enableVerboseLogging == true {
+        let containsPercentSign = line.contains("%")
+
+        if !foundProgress && containsPercentSign && settings?.enableVerboseLogging == true {
             addLog("⚠️ Could not parse progress from: \(line)")
         }
         
