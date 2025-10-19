@@ -807,7 +807,7 @@ class DownloadManager: ObservableObject {
             let targetURL = sourceURL.deletingPathExtension().appendingPathExtension("txt")
 
             try collapsed.write(to: targetURL, atomically: true, encoding: .utf8)
-            try FileManager.default.removeItem(at: path)
+            try FileManager.default.removeItem(at: sourceURL)
 
             addLog("Converted subtitles to plain text: \(targetURL.path)")
             return targetURL.path
