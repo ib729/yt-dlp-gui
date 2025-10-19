@@ -110,7 +110,7 @@
 "settings_picker_subtitle_format" = "字幕フォーマット";
 "settings_option_subtitle_srt" = "SRT";
 "settings_option_subtitle_vtt" = "VTT";
-"settings_option_subtitle_ass" = "ASS";
+"settings_option_subtitle_txt" = "TXT";
 "settings_toggle_embed_subtitles" = "字幕を動画に埋め込み";
 "settings_toggle_download_auto_subtitles" = "自動生成字幕を取得";
 "settings_toggle_subtitle_only" = "字幕のみ（メディアなし）";

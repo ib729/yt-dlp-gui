@@ -110,7 +110,7 @@
 "settings_picker_subtitle_format" = "सबटाइटल फ़ॉर्मेट";
 "settings_option_subtitle_srt" = "SRT";
 "settings_option_subtitle_vtt" = "VTT";
-"settings_option_subtitle_ass" = "ASS";
+"settings_option_subtitle_txt" = "TXT";
 "settings_toggle_embed_subtitles" = "सबटाइटल को वीडियो में एम्बेड करें";
 "settings_toggle_download_auto_subtitles" = "स्वतः उत्पन्न सबटाइटल डाउनलोड करें";
 "settings_toggle_subtitle_only" = "केवल सबटाइटल (मीडिया नहीं)";

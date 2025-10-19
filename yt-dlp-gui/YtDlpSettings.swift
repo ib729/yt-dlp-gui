@@ -65,6 +65,17 @@ struct YtDlpSettings: Codable {
         if !adjusted.preferredLanguageCode.isEmpty {
             LocalizationManager.shared.apply(languageCode: adjusted.preferredLanguageCode)
         }
+
+        var normalizedSubtitleFormat = adjusted.subtitleFormat.lowercased()
+        if normalizedSubtitleFormat == "ass" {
+            adjusted.subtitleFormat = "srt"
+            normalizedSubtitleFormat = "srt"
+        }
+
+        if normalizedSubtitleFormat == "txt" {
+            adjusted.embedSubs = false
+        }
+
         return adjusted
     }
 }

@@ -17,6 +17,8 @@ class DownloadManager: ObservableObject {
     private var ffmpegEncoderCache: [String: Set<String>] = [:]
     private var downloadedFilesForSession: [String] = []
     private var pendingProcessingFiles: [String] = []
+    private var processedDownloadPaths: [String] = []
+    private var requiresPlaintextSubtitles = false
     
     func findYTdlpPath() -> String {
         let whichProcess = Process()
@@ -366,9 +368,19 @@ class DownloadManager: ObservableObject {
                 args.append("all")
             }
             args.append("--sub-format")
-            args.append(settings.subtitleFormat)
-            
-            if settings.embedSubs && !settings.audioOnly && !needsConversion && !settings.subtitleOnly {
+            let subtitleFormat = settings.subtitleFormat.lowercased()
+            if subtitleFormat == "txt" {
+                requiresPlaintextSubtitles = true
+                args.append("srt/best")
+            } else {
+                args.append(subtitleFormat)
+            }
+
+            if subtitleFormat != "txt" &&
+                settings.embedSubs &&
+                !settings.audioOnly &&
+                !needsConversion &&
+                !settings.subtitleOnly {
                 args.append("--embed-subs")
             }
         }
@@ -559,17 +571,45 @@ class DownloadManager: ObservableObject {
         return finalPath
     }
 
+    private func finalizeDownloadPath(_ path: String) -> String {
+        let sanitizedPath = finalizeFileWithoutProcessing(at: path)
+        guard isSubtitleFile(at: sanitizedPath) else {
+            return sanitizedPath
+        }
+        return convertSubtitleToPlainTextIfNeeded(at: sanitizedPath)
+    }
+
+    private func selectPreferredDownloadPath(from paths: [String]) -> String {
+        guard !paths.isEmpty else { return "" }
+        guard let settings else {
+            return paths.last ?? ""
+        }
+
+        if settings.subtitleOnly {
+            return paths.last(where: { isSubtitleFile(at: $0) }) ?? paths.last ?? ""
+        }
+
+        if let mediaPath = paths.last(where: { !isSubtitleFile(at: $0) }) {
+            return mediaPath
+        }
+
+        return paths.last ?? ""
+    }
+
     private func finalizePendingFilesWithoutProcessing(successMessage: String) {
-        var lastFinalPath = ""
+        var processedPaths: [String] = []
 
         for path in pendingProcessingFiles {
-            let finalPath = finalizeFileWithoutProcessing(at: path)
-            lastFinalPath = finalPath
+            let finalPath = finalizeDownloadPath(path)
+            processedPaths.append(finalPath)
         }
 
         pendingProcessingFiles.removeAll()
         downloadedFilesForSession.removeAll()
-        downloadedFilePath = lastFinalPath
+        processedDownloadPaths.append(contentsOf: processedPaths)
+        downloadedFilePath = selectPreferredDownloadPath(from: processedDownloadPaths)
+        processedDownloadPaths.removeAll()
+        requiresPlaintextSubtitles = false
 
         DispatchQueue.main.async {
             self.statusMessage = successMessage
@@ -582,6 +622,9 @@ class DownloadManager: ObservableObject {
         guard let path = pendingProcessingFiles.first else {
             pendingProcessingFiles.removeAll()
             downloadedFilesForSession.removeAll()
+            downloadedFilePath = selectPreferredDownloadPath(from: processedDownloadPaths)
+            processedDownloadPaths.removeAll()
+            requiresPlaintextSubtitles = false
             DispatchQueue.main.async {
                 self.statusMessage = successMessage
                 self.progress = 1.0
@@ -592,14 +635,23 @@ class DownloadManager: ObservableObject {
 
         pendingProcessingFiles.removeFirst()
 
+        if isSubtitleFile(at: path) {
+            let finalPath = finalizeDownloadPath(path)
+            processedDownloadPaths.append(finalPath)
+            processNextPendingFile(settings: settings, successMessage: successMessage)
+            return
+        }
+
         processDownloadedFile(at: path, settings: settings) { success, errorMessage, finalPath in
             if success {
                 if let finalPath {
-                    self.downloadedFilePath = finalPath
+                    self.processedDownloadPaths.append(finalPath)
                 }
                 self.processNextPendingFile(settings: settings, successMessage: successMessage)
             } else {
                 self.pendingProcessingFiles.removeAll()
+                 self.processedDownloadPaths.removeAll()
+                 self.requiresPlaintextSubtitles = false
                 DispatchQueue.main.async {
                     self.statusMessage = errorMessage ?? "Processing failed"
                     self.progress = 0.0
@@ -682,6 +734,12 @@ class DownloadManager: ObservableObject {
             addLog("Failed to inspect description file: \(error)")
         }
     }
+
+    private func isSubtitleFile(at path: String) -> Bool {
+        let subtitleExtensions: Set<String> = ["srt", "vtt", "ass", "ssa", "lrc", "srv1", "srv2", "srv3", "ttml", "txt"]
+        let extensionName = URL(fileURLWithPath: path).pathExtension.lowercased()
+        return subtitleExtensions.contains(extensionName)
+    }
     
     private func makeTemporaryPath(for path: String, suffix: String) -> String {
         let originalURL = URL(fileURLWithPath: path)
@@ -709,6 +767,160 @@ class DownloadManager: ObservableObject {
         }
 
         return candidateURL.path
+    }
+
+    private func convertSubtitleToPlainTextIfNeeded(at path: String) -> String {
+        guard requiresPlaintextSubtitles else {
+            return path
+        }
+
+        let sourceURL = URL(fileURLWithPath: path)
+        let extensionName = sourceURL.pathExtension.lowercased()
+
+        if extensionName == "txt" {
+            return path
+        }
+
+        let supportedFormats: Set<String> = ["srt", "vtt"]
+        guard supportedFormats.contains(extensionName) else {
+            addLog("Skipping plain text subtitle conversion (unsupported format: \(extensionName))")
+            return path
+        }
+
+        do {
+            let data = try Data(contentsOf: sourceURL)
+            guard var contents = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) else {
+                addLog("Failed to decode subtitle file as text: \(path)")
+                return path
+            }
+
+            contents = contents.replacingOccurrences(of: "\r\n", with: "\n")
+
+            let plainText: String
+            if extensionName == "srt" {
+                plainText = plainTextFromSRT(contents)
+            } else {
+                plainText = plainTextFromVTT(contents)
+            }
+
+            let collapsed = collapseWhitespace(in: plainText)
+            let targetURL = sourceURL.deletingPathExtension().appendingPathExtension("txt")
+
+            try collapsed.write(to: targetURL, atomically: true, encoding: .utf8)
+            try FileManager.default.removeItem(at: path)
+
+            addLog("Converted subtitles to plain text: \(targetURL.path)")
+            return targetURL.path
+        } catch {
+            addLog("Failed to convert subtitles to plain text: \(error)")
+            return path
+        }
+    }
+
+    private func plainTextFromSRT(_ content: String) -> String {
+        let blocks = content.components(separatedBy: "\n\n")
+        var fragments: [String] = []
+
+        for block in blocks {
+            let trimmedBlock = block.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedBlock.isEmpty else { continue }
+
+            var lines = trimmedBlock.components(separatedBy: .newlines)
+            lines = lines.map { $0.trimmingCharacters(in: .whitespaces) }
+            lines.removeAll(where: { $0.isEmpty })
+
+            if let first = lines.first, Int(first) != nil {
+                lines.removeFirst()
+            }
+            if let first = lines.first, first.contains("-->") {
+                lines.removeFirst()
+            }
+            guard !lines.isEmpty else { continue }
+
+            let textLine = lines.joined(separator: " ")
+            let cleaned = stripSubtitleMarkup(from: textLine)
+            if !cleaned.isEmpty {
+                fragments.append(cleaned)
+            }
+        }
+
+        return fragments.joined(separator: " ")
+    }
+
+    private func plainTextFromVTT(_ content: String) -> String {
+        let blocks = content.components(separatedBy: "\n\n")
+        var fragments: [String] = []
+
+        for block in blocks {
+            let trimmedBlock = block.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedBlock.isEmpty else { continue }
+
+            var lines = trimmedBlock.components(separatedBy: .newlines)
+            lines = lines.map { $0.trimmingCharacters(in: .whitespaces) }
+            lines.removeAll(where: { $0.isEmpty })
+            guard !lines.isEmpty else { continue }
+
+            if lines.first?.uppercased() == "WEBVTT" {
+                lines.removeFirst()
+                if lines.isEmpty {
+                    continue
+                }
+            }
+
+            if lines.count > 1, !lines[0].contains("-->"), lines[1].contains("-->") {
+                lines.removeFirst()
+            }
+
+            lines.removeAll { line in
+                line.contains("-->") ||
+                line.uppercased().hasPrefix("NOTE") ||
+                line.uppercased().hasPrefix("STYLE") ||
+                line.uppercased().hasPrefix("REGION")
+            }
+
+            guard !lines.isEmpty else { continue }
+
+            let textLine = lines.joined(separator: " ")
+            let cleaned = stripSubtitleMarkup(from: textLine)
+            if !cleaned.isEmpty {
+                fragments.append(cleaned)
+            }
+        }
+
+        return fragments.joined(separator: " ")
+    }
+
+    private func stripSubtitleMarkup(from text: String) -> String {
+        let range = NSRange(location: 0, length: text.utf16.count)
+        let regex = try? NSRegularExpression(pattern: "<[^>]+>", options: [])
+        let withoutTags = regex?.stringByReplacingMatches(in: text, options: [], range: range, withTemplate: "") ?? text
+
+        var decoded = withoutTags
+        let entities: [String: String] = [
+            "&amp;": "&",
+            "&lt;": "<",
+            "&gt;": ">",
+            "&nbsp;": " ",
+            "&quot;": "\"",
+            "&#39;": "'",
+            "&#x27;": "'"
+        ]
+
+        for (entity, value) in entities {
+            decoded = decoded.replacingOccurrences(of: entity, with: value)
+        }
+
+        let directionalMarks: Set<Character> = ["\u{200E}", "\u{200F}", "\u{202A}", "\u{202B}", "\u{202C}"]
+        decoded.removeAll { directionalMarks.contains($0) }
+
+        return decoded
+    }
+
+    private func collapseWhitespace(in text: String) -> String {
+        let components = text
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+        return components.joined(separator: " ")
     }
 
     private func needsPostProcessing(_ settings: YtDlpSettings) -> Bool {
@@ -1175,6 +1387,8 @@ class DownloadManager: ObservableObject {
         self.downloadedFilePath = ""
         self.downloadedFilesForSession.removeAll()
         self.pendingProcessingFiles.removeAll()
+        self.processedDownloadPaths.removeAll()
+        self.requiresPlaintextSubtitles = false
 
         let ytdlpPath = effectiveSettings.customYtdlpPath.isEmpty ?
             findYTdlpPath() : expandPath(effectiveSettings.customYtdlpPath)
@@ -1300,6 +1514,8 @@ class DownloadManager: ObservableObject {
                     }
                     self.pendingProcessingFiles.removeAll()
                     self.downloadedFilesForSession.removeAll()
+                    self.processedDownloadPaths.removeAll()
+                    self.requiresPlaintextSubtitles = false
                     self.addLog("Download failed with exit code \(exitCode)")
                 }
             } catch {
@@ -1318,6 +1534,8 @@ class DownloadManager: ObservableObject {
                 }
                 self.pendingProcessingFiles.removeAll()
                 self.downloadedFilesForSession.removeAll()
+                self.processedDownloadPaths.removeAll()
+                self.requiresPlaintextSubtitles = false
                 self.addLog("Failed to start download: \(error.localizedDescription)")
             }
         }
@@ -1360,12 +1578,37 @@ class DownloadManager: ObservableObject {
                 }
             }
 
+            var recordedSubtitlePath = false
+            let subtitleMarkers = [
+                "Writing video subtitles to:",
+                "Writing subtitles to:",
+                "Writing auto subtitles to:",
+                "Writing automatic captions to:"
+            ]
+
+            for marker in subtitleMarkers {
+                if let markerRange = trimmedLine.range(of: marker) {
+                    let rawPath = trimmedLine[markerRange.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !rawPath.isEmpty {
+                        let cleanedPath = rawPath.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+                        recordDownloadedFile(path: cleanedPath)
+                        recordedSubtitlePath = true
+                        break
+                    }
+                }
+            }
+
+            if recordedSubtitlePath {
+                continue
+            }
+
             if !trimmedLine.hasPrefix("[") && trimmedLine.contains("/") {
                 let lowercasedLine = trimmedLine.lowercased()
                 let knownExtensions = [
                     "mp4", "mkv", "webm", "avi", "mov", "m4v",
                     "m4a", "mp3", "flac", "wav", "opus", "ogg",
-                    "aac", "ts"
+                    "aac", "ts", "srt", "vtt", "ass", "ssa", "lrc",
+                    "srv1", "srv2", "srv3", "ttml", "txt"
                 ]
 
                 if knownExtensions.contains(where: { lowercasedLine.hasSuffix(".\($0)") }) {

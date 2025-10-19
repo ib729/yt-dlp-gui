@@ -110,7 +110,7 @@
 "settings_picker_subtitle_format" = "字幕格式";
 "settings_option_subtitle_srt" = "SRT";
 "settings_option_subtitle_vtt" = "VTT";
-"settings_option_subtitle_ass" = "ASS";
+"settings_option_subtitle_txt" = "TXT";
 "settings_toggle_embed_subtitles" = "將字幕嵌入影片";
 "settings_toggle_download_auto_subtitles" = "下載自動產生字幕";
 "settings_toggle_subtitle_only" = "僅字幕（略過媒體）";

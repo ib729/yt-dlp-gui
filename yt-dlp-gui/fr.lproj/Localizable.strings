@@ -110,7 +110,7 @@
 "settings_picker_subtitle_format" = "Format des sous-titres";
 "settings_option_subtitle_srt" = "SRT";
 "settings_option_subtitle_vtt" = "VTT";
-"settings_option_subtitle_ass" = "ASS";
+"settings_option_subtitle_txt" = "TXT";
 "settings_toggle_embed_subtitles" = "Intégrer les sous-titres dans la vidéo";
 "settings_toggle_download_auto_subtitles" = "Télécharger les sous-titres automatiques";
 "settings_toggle_subtitle_only" = "Sous-titres uniquement (sans média)";

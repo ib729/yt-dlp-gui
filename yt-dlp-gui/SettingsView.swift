@@ -131,6 +131,11 @@ struct SettingsView: View {
             LocalizationManager.shared.apply(languageCode: normalized)
             showLanguageRestartNotice = true
         }
+        .onChange(of: settings.subtitleFormat) { _, newValue in
+            if newValue == "txt" {
+                settings.embedSubs = false
+            }
+        }
     }
 
     @ViewBuilder
@@ -371,14 +376,14 @@ struct SettingsView: View {
                     Picker("settings_picker_subtitle_format", selection: $settings.subtitleFormat) {
                         Text("settings_option_subtitle_srt").tag("srt")
                         Text("settings_option_subtitle_vtt").tag("vtt")
-                        Text("settings_option_subtitle_ass").tag("ass")
+                        Text("settings_option_subtitle_txt").tag("txt")
                     }
                     .pickerStyle(.segmented)
                 }
 
                 if !settings.audioOnly {
                     Toggle("settings_toggle_embed_subtitles", isOn: $settings.embedSubs)
-                        .disabled(settings.subtitleOnly)
+                        .disabled(settings.subtitleOnly || settings.subtitleFormat == "txt")
                 }
 
                 Toggle("settings_toggle_download_auto_subtitles", isOn: $settings.writeAutoSubs)
