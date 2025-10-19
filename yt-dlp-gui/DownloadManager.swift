@@ -787,6 +787,11 @@ class DownloadManager: ObservableObject {
             return path
         }
 
+        guard FileManager.default.fileExists(atPath: sourceURL.path) else {
+            addLog("Skipping plain text conversion because file is missing: \(sourceURL.path)")
+            return path
+        }
+
         do {
             let data = try Data(contentsOf: sourceURL)
             guard var contents = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) else {
@@ -1599,6 +1604,10 @@ class DownloadManager: ObservableObject {
             }
 
             if recordedSubtitlePath {
+                continue
+            }
+
+            if trimmedLine.hasPrefix("Deleting existing file ") {
                 continue
             }
 
