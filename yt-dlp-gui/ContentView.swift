@@ -356,7 +356,7 @@ struct ContentView: View {
         return rawValue
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+            .filter { !$0.isEmpty && InputValidation.isValidURL($0) }
     }
     
     private func checkYtdlpInstallation() {

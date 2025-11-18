@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import AppKit
 
 class DownloadManager: ObservableObject {
     @Published var isDownloading = false
@@ -19,6 +20,74 @@ class DownloadManager: ObservableObject {
     private var pendingProcessingFiles: [String] = []
     private var processedDownloadPaths: [String] = []
     private var requiresPlaintextSubtitles = false
+    private var temporaryCookieFile: URL?
+    private var temporaryFiles: Set<URL> = []
+    
+    // Serial queue for synchronizing access to shared mutable state
+    private let syncQueue = DispatchQueue(label: "com.ib729.yt-dlp-gui.DownloadManager.sync")
+    
+    init() {
+        // Register for app termination notification to cleanup temp files
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(cleanupOnTermination),
+            name: NSApplication.willTerminateNotification,
+            object: nil
+        )
+        
+        // Clean up any leftover temp files from previous sessions
+        cleanupStaleTemporaryFiles()
+    }
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+        cleanupAllTemporaryFiles()
+    }
+    
+    @objc private func cleanupOnTermination() {
+        cleanupAllTemporaryFiles()
+    }
+    
+    private func cleanupStaleTemporaryFiles() {
+        let tempDir = FileManager.default.temporaryDirectory
+        let fileManager = FileManager.default
+        
+        guard let enumerator = fileManager.enumerator(at: tempDir, includingPropertiesForKeys: [.creationDateKey]) else {
+            return
+        }
+        
+        let cutoffDate = Date().addingTimeInterval(-86400) // 24 hours ago
+        
+        for case let fileURL as URL in enumerator {
+            // Only clean up our cookie files
+            guard fileURL.lastPathComponent.hasPrefix("cookies_") else { continue }
+            
+            do {
+                let attributes = try fileManager.attributesOfItem(atPath: fileURL.path)
+                if let creationDate = attributes[.creationDate] as? Date, creationDate < cutoffDate {
+                    try fileManager.removeItem(at: fileURL)
+                }
+            } catch {
+                // Ignore errors during cleanup
+            }
+        }
+    }
+    
+    private func trackTemporaryFile(_ url: URL) {
+        syncQueue.async { [weak self] in
+            self?.temporaryFiles.insert(url)
+        }
+    }
+    
+    private func cleanupAllTemporaryFiles() {
+        syncQueue.sync {
+            let fileManager = FileManager.default
+            for fileURL in temporaryFiles {
+                try? fileManager.removeItem(at: fileURL)
+            }
+            temporaryFiles.removeAll()
+        }
+    }
     
     func findYTdlpPath() -> String {
         let whichProcess = Process()
@@ -195,11 +264,48 @@ class DownloadManager: ObservableObject {
         return environment
     }
     
+    private func sanitizeURL(_ urlString: String) -> String {
+        guard let url = URL(string: urlString) else { return urlString }
+        
+        // Remove query parameters that might contain auth tokens
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return urlString
+        }
+        
+        // Keep the URL but indicate query parameters were removed
+        if components.queryItems != nil && !components.queryItems!.isEmpty {
+            components.queryItems = nil
+            return (components.url?.absoluteString ?? urlString) + "?[REDACTED]"
+        }
+        
+        return urlString
+    }
+    
+    private func sanitizeForLogging(_ message: String) -> String {
+        var sanitized = message
+        
+        // Sanitize URLs that might contain auth tokens
+        if let regex = try? NSRegularExpression(pattern: "https?://[^\\s]+", options: []) {
+            let matches = regex.matches(in: sanitized, options: [], range: NSRange(sanitized.startIndex..., in: sanitized))
+            for match in matches.reversed() {
+                if let range = Range(match.range, in: sanitized) {
+                    let urlString = String(sanitized[range])
+                    let sanitizedURL = sanitizeURL(urlString)
+                    sanitized.replaceSubrange(range, with: sanitizedURL)
+                }
+            }
+        }
+        
+        return sanitized
+    }
+    
     private func addLog(_ message: String) {
         let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        let logEntry = "[\(timestamp)] \(message)"
+        let sanitizedMessage = sanitizeForLogging(message)
+        let logEntry = "[\(timestamp)] \(sanitizedMessage)"
         
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
             self.downloadLogs.append(logEntry)
             if self.downloadLogs.count > 1000 {
                 self.downloadLogs.removeFirst(100)
@@ -211,6 +317,24 @@ class DownloadManager: ObservableObject {
         DispatchQueue.main.async {
             self.downloadLogs.removeAll()
             self.rawOutput = ""
+        }
+    }
+    
+    private func cleanupTemporaryCookieFile() {
+        syncQueue.async { [weak self] in
+            guard let self = self, let cookieFile = self.temporaryCookieFile else { return }
+            
+            do {
+                if FileManager.default.fileExists(atPath: cookieFile.path) {
+                    try FileManager.default.removeItem(at: cookieFile)
+                    self.addLog("Cleaned up temporary cookie file")
+                }
+                self.temporaryFiles.remove(cookieFile)
+            } catch {
+                self.addLog("Failed to cleanup cookie file: \(error)")
+            }
+            
+            self.temporaryCookieFile = nil
         }
     }
     
@@ -297,6 +421,14 @@ class DownloadManager: ObservableObject {
         let outputPath = settings.outputPath.isEmpty ? "~/Downloads" : settings.outputPath
         let expandedPath = expandPath(outputPath)
         
+        // Validate path doesn't contain path traversal
+        guard InputValidation.isValidPath(outputPath) else {
+            addLog("Invalid output path detected - using default Downloads folder")
+            args.append("-o")
+            args.append("\(expandPath("~/Downloads"))/%(title)s.%(ext)s")
+            return args
+        }
+        
         args.append("-o")
         args.append("\(expandedPath)/%(title)s.%(ext)s")
 
@@ -324,7 +456,7 @@ class DownloadManager: ObservableObject {
             args.append("--audio-format")
             args.append(audioFormat)
             
-            if !settings.audioQuality.isEmpty {
+            if !settings.audioQuality.isEmpty && InputValidation.isValidAudioQuality(settings.audioQuality) {
                 args.append("--audio-quality")
                 args.append(settings.audioQuality + "K")
             }
@@ -412,19 +544,19 @@ class DownloadManager: ObservableObject {
         }
         
         // Download limits
-        if !settings.maxDownloads.isEmpty {
+        if !settings.maxDownloads.isEmpty && InputValidation.isValidMaxDownloads(settings.maxDownloads) {
             args.append("--max-downloads")
             args.append(settings.maxDownloads)
         }
         
         // Rate limiting
-        if !settings.rateLimit.isEmpty {
+        if !settings.rateLimit.isEmpty && InputValidation.isValidRateLimit(settings.rateLimit) {
             args.append("--limit-rate")
             args.append(settings.rateLimit)
         }
         
         // Retries
-        if !settings.retries.isEmpty {
+        if !settings.retries.isEmpty && InputValidation.isValidRetries(settings.retries) {
             args.append("--retries")
             args.append(settings.retries)
         }
@@ -443,7 +575,7 @@ class DownloadManager: ObservableObject {
         
         // Cookies
         if settings.useBrowserCookies {
-            addLog("Using cookies from browser: \(settings.browserCookieSource)")
+            addLog("Using cookies from browser")
             args.append("--cookies-from-browser")
             args.append(settings.browserCookieSource)
         }
@@ -454,9 +586,16 @@ class DownloadManager: ObservableObject {
             
             do {
                 try settings.cookieData.write(to: cookieFileURL, atomically: true, encoding: .utf8)
+                
+                // Set restrictive file permissions (owner read/write only)
+                let attributes = [FileAttributeKey.posixPermissions: 0o600]
+                try FileManager.default.setAttributes(attributes, ofItemAtPath: cookieFileURL.path)
+                
                 args.append("--cookies")
                 args.append(cookieFileURL.path)
-                addLog("Created temporary cookie file: \(cookieFileURL.path)")
+                temporaryCookieFile = cookieFileURL
+                trackTemporaryFile(cookieFileURL)
+                addLog("Created temporary cookie file")
             } catch {
                 addLog("Failed to write cookie file: \(error)")
             }
@@ -473,7 +612,12 @@ class DownloadManager: ObservableObject {
         }
         
         if settings.logCommands {
-            addLog("Download command: yt-dlp \(args.joined(separator: " "))")
+            // Don't log the full command if it contains cookies or sensitive flags
+            if temporaryCookieFile != nil || settings.useBrowserCookies {
+                addLog("Download command: yt-dlp [REDACTED - contains authentication data]")
+            } else {
+                addLog("Download command: yt-dlp \(args.joined(separator: " "))")
+            }
         }
         
         return args
@@ -597,65 +741,80 @@ class DownloadManager: ObservableObject {
     }
 
     private func finalizePendingFilesWithoutProcessing(successMessage: String) {
-        var processedPaths: [String] = []
+        syncQueue.async { [weak self] in
+            guard let self = self else { return }
+            
+            var processedPaths: [String] = []
 
-        for path in pendingProcessingFiles {
-            let finalPath = finalizeDownloadPath(path)
-            processedPaths.append(finalPath)
-        }
+            for path in self.pendingProcessingFiles {
+                let finalPath = self.finalizeDownloadPath(path)
+                processedPaths.append(finalPath)
+            }
 
-        pendingProcessingFiles.removeAll()
-        downloadedFilesForSession.removeAll()
-        processedDownloadPaths.append(contentsOf: processedPaths)
-        downloadedFilePath = selectPreferredDownloadPath(from: processedDownloadPaths)
-        processedDownloadPaths.removeAll()
-        requiresPlaintextSubtitles = false
+            self.pendingProcessingFiles.removeAll()
+            self.downloadedFilesForSession.removeAll()
+            self.processedDownloadPaths.append(contentsOf: processedPaths)
+            self.downloadedFilePath = self.selectPreferredDownloadPath(from: self.processedDownloadPaths)
+            self.processedDownloadPaths.removeAll()
+            self.requiresPlaintextSubtitles = false
+            self.cleanupTemporaryCookieFile()
 
-        DispatchQueue.main.async {
-            self.statusMessage = successMessage
-            self.progress = 1.0
-            self.isDownloading = false
-        }
-    }
-
-    private func processNextPendingFile(settings: YtDlpSettings, successMessage: String) {
-        guard let path = pendingProcessingFiles.first else {
-            pendingProcessingFiles.removeAll()
-            downloadedFilesForSession.removeAll()
-            downloadedFilePath = selectPreferredDownloadPath(from: processedDownloadPaths)
-            processedDownloadPaths.removeAll()
-            requiresPlaintextSubtitles = false
             DispatchQueue.main.async {
                 self.statusMessage = successMessage
                 self.progress = 1.0
                 self.isDownloading = false
             }
-            return
         }
+    }
 
-        pendingProcessingFiles.removeFirst()
-
-        if isSubtitleFile(at: path) {
-            let finalPath = finalizeDownloadPath(path)
-            processedDownloadPaths.append(finalPath)
-            processNextPendingFile(settings: settings, successMessage: successMessage)
-            return
-        }
-
-        processDownloadedFile(at: path, settings: settings) { success, errorMessage, finalPath in
-            if success {
-                if let finalPath {
-                    self.processedDownloadPaths.append(finalPath)
-                }
-                self.processNextPendingFile(settings: settings, successMessage: successMessage)
-            } else {
+    private func processNextPendingFile(settings: YtDlpSettings, successMessage: String) {
+        syncQueue.async { [weak self] in
+            guard let self = self else { return }
+            
+            guard let path = self.pendingProcessingFiles.first else {
                 self.pendingProcessingFiles.removeAll()
-                 self.processedDownloadPaths.removeAll()
-                 self.requiresPlaintextSubtitles = false
+                self.downloadedFilesForSession.removeAll()
+                self.downloadedFilePath = self.selectPreferredDownloadPath(from: self.processedDownloadPaths)
+                self.processedDownloadPaths.removeAll()
+                self.requiresPlaintextSubtitles = false
+                self.cleanupTemporaryCookieFile()
                 DispatchQueue.main.async {
-                    self.statusMessage = errorMessage ?? "Processing failed"
-                    self.progress = 0.0
+                    self.statusMessage = successMessage
+                    self.progress = 1.0
                     self.isDownloading = false
+                }
+                return
+            }
+
+            self.pendingProcessingFiles.removeFirst()
+
+            if self.isSubtitleFile(at: path) {
+                let finalPath = self.finalizeDownloadPath(path)
+                self.processedDownloadPaths.append(finalPath)
+                self.processNextPendingFile(settings: settings, successMessage: successMessage)
+                return
+            }
+
+            self.processDownloadedFile(at: path, settings: settings) { success, errorMessage, finalPath in
+                if success {
+                    self.syncQueue.async {
+                        if let finalPath {
+                            self.processedDownloadPaths.append(finalPath)
+                        }
+                        self.processNextPendingFile(settings: settings, successMessage: successMessage)
+                    }
+                } else {
+                    self.syncQueue.async {
+                        self.pendingProcessingFiles.removeAll()
+                        self.processedDownloadPaths.removeAll()
+                        self.requiresPlaintextSubtitles = false
+                        self.cleanupTemporaryCookieFile()
+                        DispatchQueue.main.async {
+                            self.statusMessage = errorMessage ?? "Processing failed"
+                            self.progress = 0.0
+                            self.isDownloading = false
+                        }
+                    }
                 }
             }
         }
@@ -708,11 +867,14 @@ class DownloadManager: ObservableObject {
         let normalizedPath = path.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedPath.isEmpty else { return }
 
-        downloadedFilePath = normalizedPath
+        syncQueue.async { [weak self] in
+            guard let self = self else { return }
+            self.downloadedFilePath = normalizedPath
 
-        if !downloadedFilesForSession.contains(normalizedPath) {
-            downloadedFilesForSession.append(normalizedPath)
-            addLog("Downloaded file: \(normalizedPath)")
+            if !self.downloadedFilesForSession.contains(normalizedPath) {
+                self.downloadedFilesForSession.append(normalizedPath)
+                self.addLog("Downloaded file: \(normalizedPath)")
+            }
         }
     }
 
@@ -766,6 +928,9 @@ class DownloadManager: ObservableObject {
             counter += 1
         }
 
+        // Track this temporary file for cleanup
+        trackTemporaryFile(candidateURL)
+        
         return candidateURL.path
     }
 
@@ -1102,11 +1267,13 @@ class DownloadManager: ObservableObject {
             }
         }
         
+        defer {
+            pipe.fileHandleForReading.readabilityHandler = nil
+        }
+        
         do {
             try remuxProcess.run()
             remuxProcess.waitUntilExit()
-
-            pipe.fileHandleForReading.readabilityHandler = nil
 
             if remuxProcess.terminationStatus == 0 {
                 let finalPath: String
@@ -1255,7 +1422,7 @@ class DownloadManager: ObservableObject {
         }
         
         // Quality settings
-        if !settings.audioQuality.isEmpty {
+        if !settings.audioQuality.isEmpty && InputValidation.isValidAudioQuality(settings.audioQuality) {
             args.append(contentsOf: ["-b:a", "\(settings.audioQuality)k"])
         }
         
@@ -1282,11 +1449,13 @@ class DownloadManager: ObservableObject {
             }
         }
         
+        defer {
+            pipe.fileHandleForReading.readabilityHandler = nil
+        }
+        
         do {
             try conversionProcess.run()
             conversionProcess.waitUntilExit()
-
-            pipe.fileHandleForReading.readabilityHandler = nil
 
             if conversionProcess.terminationStatus == 0 {
                 let finalPath: String
@@ -1451,11 +1620,10 @@ class DownloadManager: ObservableObject {
             self.eta = ""
         }
         
-        if downloadCount == 1, let singleURL = sanitizedUrls.first {
-            addLog("Starting download for URL: \(singleURL)")
+        if downloadCount == 1 {
+            addLog("Starting download for 1 URL")
         } else {
             addLog("Starting download batch for \(downloadCount) URLs")
-            addLog("Targets: \(sanitizedUrls.joined(separator: ", "))")
         }
         addLog("Using yt-dlp at: \(ytdlpPath)")
         
@@ -1481,67 +1649,79 @@ class DownloadManager: ObservableObject {
                 }
             }
             
+            defer {
+                pipe.fileHandleForReading.readabilityHandler = nil
+            }
+            
             do {
                 try self.process?.run()
                 self.addLog("Process started successfully")
                 self.process?.waitUntilExit()
                 
-                pipe.fileHandleForReading.readabilityHandler = nil
-                
                 let exitCode = self.process?.terminationStatus ?? -1
                 if exitCode == 0 {
                     self.addLog("Download completed successfully")
 
-                    self.pendingProcessingFiles = self.downloadedFilesForSession
-                    self.downloadedFilesForSession.removeAll()
+                    self.syncQueue.async {
+                        self.pendingProcessingFiles = self.downloadedFilesForSession
+                        self.downloadedFilesForSession.removeAll()
 
-                    let successMessage = String(
-                        localized: "status_download_complete",
-                        comment: "Status when downloads complete successfully"
-                    )
+                        let successMessage = String(
+                            localized: "status_download_complete",
+                            comment: "Status when downloads complete successfully"
+                        )
 
-                    if self.needsConversion {
-                        self.processNextPendingFile(settings: effectiveSettings, successMessage: successMessage)
-                    } else {
-                        self.finalizePendingFilesWithoutProcessing(successMessage: successMessage)
+                        if self.needsConversion {
+                            self.processNextPendingFile(settings: effectiveSettings, successMessage: successMessage)
+                        } else {
+                            self.finalizePendingFilesWithoutProcessing(successMessage: successMessage)
+                        }
                     }
                 } else {
-                    DispatchQueue.main.async {
-                        self.statusMessage = String(
-                            format: String(
-                                localized: "status_download_failed_code",
-                                comment: "Status when download terminates with an exit code"
-                            ),
-                            exitCode
-                        )
-                        self.progress = 0.0
-                        self.isDownloading = false
+                    self.syncQueue.async {
+                        self.cleanupTemporaryCookieFile()
+                        self.pendingProcessingFiles.removeAll()
+                        self.downloadedFilesForSession.removeAll()
+                        self.processedDownloadPaths.removeAll()
+                        self.requiresPlaintextSubtitles = false
+                        
+                        DispatchQueue.main.async {
+                            self.statusMessage = String(
+                                format: String(
+                                    localized: "status_download_failed_code",
+                                    comment: "Status when download terminates with an exit code"
+                                ),
+                                exitCode
+                            )
+                            self.progress = 0.0
+                            self.isDownloading = false
+                        }
+                        self.addLog("Download failed with exit code \(exitCode)")
                     }
+                }
+            } catch {
+                self.syncQueue.async {
+                    self.cleanupTemporaryCookieFile()
                     self.pendingProcessingFiles.removeAll()
                     self.downloadedFilesForSession.removeAll()
                     self.processedDownloadPaths.removeAll()
                     self.requiresPlaintextSubtitles = false
-                    self.addLog("Download failed with exit code \(exitCode)")
+                    
+                    DispatchQueue.main.async {
+                        self.statusMessage = String(
+                            format: String(
+                                localized: "status_download_start_failed",
+                                comment: "Status when download process fails to launch"
+                            ),
+                            error.localizedDescription
+                        )
+                        self.isDownloading = false
+                        self.progress = 0.0
+                        self.downloadSpeed = ""
+                        self.eta = ""
+                    }
+                    self.addLog("Failed to start download: \(error.localizedDescription)")
                 }
-            } catch {
-                DispatchQueue.main.async {
-                    self.statusMessage = String(
-                        format: String(
-                            localized: "status_download_start_failed",
-                            comment: "Status when download process fails to launch"
-                        ),
-                        error.localizedDescription
-                    )
-                    self.isDownloading = false
-                    self.progress = 0.0
-                    self.downloadSpeed = ""
-                    self.eta = ""
-                }
-                self.pendingProcessingFiles.removeAll()
-                self.downloadedFilesForSession.removeAll()
-                self.processedDownloadPaths.removeAll()
-                self.requiresPlaintextSubtitles = false
-                self.addLog("Failed to start download: \(error.localizedDescription)")
             }
         }
     }
@@ -1777,7 +1957,17 @@ class DownloadManager: ObservableObject {
     }
     
     func cancelDownload() {
-        process?.terminate()
+        if let process = process {
+            process.terminate()
+            // Wait a short time for graceful termination
+            DispatchQueue.global(qos: .utility).async {
+                let deadline = DispatchTime.now() + .seconds(5)
+                while process.isRunning && DispatchTime.now() < deadline {
+                    Thread.sleep(forTimeInterval: 0.1)
+                }
+            }
+        }
+        cleanupTemporaryCookieFile()
         addLog("Download cancelled by user")
         DispatchQueue.main.async {
             self.isDownloading = false

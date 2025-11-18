@@ -6,7 +6,6 @@ struct YtDlpSettings: Codable {
     var downloadSubtitles: Bool = true
     var subtitleLanguage: String = "en"
     var audioOnly: Bool = false
-    var cookieData: String = ""
     var outputPath: String = "~/Downloads"
     var customYtdlpPath: String = ""
     var customFfmpegPath: String = ""
@@ -40,6 +39,28 @@ struct YtDlpSettings: Codable {
     var useBrowserCookies: Bool = false
     var browserCookieSource: String = "safari"
     var preferredLanguageCode: String = ""
+    
+    // Cookie data is stored securely in Keychain, not in this struct
+    var cookieData: String {
+        get {
+            do {
+                return try KeychainHelper.shared.retrieveString(for: "yt-dlp-gui.cookieData")
+            } catch {
+                return ""
+            }
+        }
+        set {
+            do {
+                if newValue.isEmpty {
+                    try? KeychainHelper.shared.delete(for: "yt-dlp-gui.cookieData")
+                } else {
+                    try KeychainHelper.shared.save(newValue, for: "yt-dlp-gui.cookieData")
+                }
+            } catch {
+                // Silent failure - cookies won't be persisted
+            }
+        }
+    }
     
     func save() {
         if let encoded = try? JSONEncoder().encode(self) {
