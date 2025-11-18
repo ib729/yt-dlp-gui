@@ -55,9 +55,37 @@ struct SettingsView: View {
     
     init(settings: Binding<YtDlpSettings>) {
         _settings = settings
-        _cookieCount = State(initialValue: SettingsView.countCookies(in: settings.wrappedValue.cookieData))
-        _isYtdlpMissing = State(initialValue: SettingsView.binaryMissing("yt-dlp", customPath: settings.wrappedValue.customYtdlpPath))
-        _isFfmpegMissing = State(initialValue: SettingsView.binaryMissing("ffmpeg", customPath: settings.wrappedValue.customFfmpegPath))
+        // Initialize with default values - async checks will update these
+        _cookieCount = State(initialValue: 0)
+        _isYtdlpMissing = State(initialValue: false)
+        _isFfmpegMissing = State(initialValue: false)
+    }
+
+    private func performInitialChecks() async {
+        // Capture values on main actor before detaching
+        let ytdlpPath = settings.customYtdlpPath
+        let ffmpegPath = settings.customFfmpegPath
+        let cookieData = settings.cookieData
+        
+        // Run expensive operations off the main thread
+        let ytdlpMissing = await Task.detached {
+            SettingsView.binaryMissing("yt-dlp", customPath: ytdlpPath)
+        }.value
+        
+        let ffmpegMissing = await Task.detached {
+            SettingsView.binaryMissing("ffmpeg", customPath: ffmpegPath)
+        }.value
+        
+        let cookieDataCount = await Task.detached {
+            SettingsView.countCookies(in: cookieData)
+        }.value
+        
+        // Update state on main thread
+        await MainActor.run {
+            isYtdlpMissing = ytdlpMissing
+            isFfmpegMissing = ffmpegMissing
+            cookieCount = cookieDataCount
+        }
     }
 
     private func refreshBinaryAvailability() {
@@ -107,20 +135,37 @@ struct SettingsView: View {
             }
         }
         .frame(minWidth: 680, minHeight: 760)
+        .task {
+            // Perform expensive checks asynchronously
+            await performInitialChecks()
+        }
         .onAppear {
             showLanguageRestartNotice = false
             settings.preferredLanguageCode = LocalizationManager.shared.normalized(code: settings.preferredLanguageCode)
-            refreshBinaryAvailability()
-            refreshCookieCount()
         }
         .onChange(of: settings.customYtdlpPath) { _, newValue in
-            isYtdlpMissing = SettingsView.binaryMissing("yt-dlp", customPath: newValue)
+            Task.detached {
+                let missing = SettingsView.binaryMissing("yt-dlp", customPath: newValue)
+                await MainActor.run {
+                    isYtdlpMissing = missing
+                }
+            }
         }
         .onChange(of: settings.customFfmpegPath) { _, newValue in
-            isFfmpegMissing = SettingsView.binaryMissing("ffmpeg", customPath: newValue)
+            Task.detached {
+                let missing = SettingsView.binaryMissing("ffmpeg", customPath: newValue)
+                await MainActor.run {
+                    isFfmpegMissing = missing
+                }
+            }
         }
         .onChange(of: settings.cookieData) { _, newValue in
-            cookieCount = SettingsView.countCookies(in: newValue)
+            Task.detached {
+                let count = SettingsView.countCookies(in: newValue)
+                await MainActor.run {
+                    cookieCount = count
+                }
+            }
         }
         .onChange(of: settings.preferredLanguageCode) { _, newValue in
             let normalized = LocalizationManager.shared.normalized(code: newValue)
@@ -566,7 +611,7 @@ struct SettingsView: View {
         }
     }
     
-    private static func binaryMissing(_ name: String, customPath: String) -> Bool {
+    private nonisolated static func binaryMissing(_ name: String, customPath: String) -> Bool {
         let fm = FileManager.default
         let resolvedCustom = expandTilde(customPath)
         if !resolvedCustom.isEmpty, fm.isExecutableFile(atPath: resolvedCustom) {
@@ -601,12 +646,12 @@ struct SettingsView: View {
         return true
     }
 
-    private static func expandTilde(_ path: String) -> String {
+    private nonisolated static func expandTilde(_ path: String) -> String {
         let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "" : (trimmed as NSString).expandingTildeInPath
     }
 
-    private static func countCookies(in cookieData: String) -> Int {
+    private nonisolated static func countCookies(in cookieData: String) -> Int {
         var count = 0
         cookieData.enumerateLines { line, _ in
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
