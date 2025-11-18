@@ -174,3 +174,4 @@
 "status_warning_line" = "⚠️ %@";
 "status_eta_format" = "預估剩餘 %@";
 "status_download_cancelled" = "下載已取消";
+"status_no_subtitles_available" = "此影片沒有可用的字幕";

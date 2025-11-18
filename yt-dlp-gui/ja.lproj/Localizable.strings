@@ -174,3 +174,4 @@
 "status_warning_line" = "⚠️ %@";
 "status_eta_format" = "残り時間 %@";
 "status_download_cancelled" = "ダウンロードをキャンセルしました";
+"status_no_subtitles_available" = "この動画には字幕がありません";

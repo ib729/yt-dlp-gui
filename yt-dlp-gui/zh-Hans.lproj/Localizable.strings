@@ -174,3 +174,4 @@
 "status_warning_line" = "⚠️ %@";
 "status_eta_format" = "预计剩余 %@";
 "status_download_cancelled" = "下载已取消";
+"status_no_subtitles_available" = "此视频没有可用的字幕";

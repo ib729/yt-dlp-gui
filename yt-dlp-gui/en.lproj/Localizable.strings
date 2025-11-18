@@ -174,3 +174,4 @@
 "status_warning_line" = "⚠️ %@";
 "status_eta_format" = "ETA %@";
 "status_download_cancelled" = "Download cancelled";
+"status_no_subtitles_available" = "No subtitles available for this video";

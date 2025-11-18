@@ -174,3 +174,4 @@
 "status_warning_line" = "⚠️ %@";
 "status_eta_format" = "अनुमानित समय %@";
 "status_download_cancelled" = "डाउनलोड रद्द किया गया";
+"status_no_subtitles_available" = "इस वीडियो के लिए सबटाइटल उपलब्ध नहीं हैं";

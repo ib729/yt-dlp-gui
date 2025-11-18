@@ -174,3 +174,4 @@
 "status_warning_line" = "⚠️ %@";
 "status_eta_format" = "Temps restant %@";
 "status_download_cancelled" = "Téléchargement annulé";
+"status_no_subtitles_available" = "Aucun sous-titre disponible pour cette vidéo";

@@ -1666,6 +1666,34 @@ class DownloadManager: ObservableObject {
                         self.pendingProcessingFiles = self.downloadedFilesForSession
                         self.downloadedFilesForSession.removeAll()
 
+                        // Check if subtitles-only mode was enabled but no subtitle files were downloaded
+                        if effectiveSettings.subtitleOnly {
+                            let hasSubtitles = self.pendingProcessingFiles.contains { path in
+                                self.isSubtitleFile(at: path)
+                            }
+                            
+                            if !hasSubtitles || self.pendingProcessingFiles.isEmpty {
+                                self.addLog("⚠️ WARNING: Subtitles-only mode was enabled, but no subtitle files were downloaded.")
+                                self.addLog("⚠️ This video may not have subtitles available in the requested language.")
+                                
+                                self.cleanupTemporaryCookieFile()
+                                self.pendingProcessingFiles.removeAll()
+                                self.processedDownloadPaths.removeAll()
+                                self.requiresPlaintextSubtitles = false
+                                
+                                DispatchQueue.main.async {
+                                    self.statusMessage = String(
+                                        localized: "status_no_subtitles_available",
+                                        defaultValue: "No subtitles available for this video",
+                                        comment: "Status when subtitles-only mode is enabled but no subtitles exist"
+                                    )
+                                    self.progress = 0.0
+                                    self.isDownloading = false
+                                }
+                                return
+                            }
+                        }
+
                         let successMessage = String(
                             localized: "status_download_complete",
                             comment: "Status when downloads complete successfully"
@@ -1826,6 +1854,23 @@ class DownloadManager: ObservableObject {
                     )
                 }
             } else if trimmedLine.contains("WARNING") {
+                // Log specific subtitle-related warnings
+                let subtitleWarningKeywords = [
+                    "subtitle",
+                    "caption",
+                    "Requested language",
+                    "No subtitle",
+                    "not available"
+                ]
+                
+                let isSubtitleWarning = subtitleWarningKeywords.contains { keyword in
+                    trimmedLine.localizedCaseInsensitiveContains(keyword)
+                }
+                
+                if isSubtitleWarning && self.settings?.subtitleOnly == true {
+                    self.addLog("⚠️ \(trimmedLine)")
+                }
+                
                 DispatchQueue.main.async {
                     self.statusMessage = String(
                         format: String(
