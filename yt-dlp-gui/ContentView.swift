@@ -7,6 +7,7 @@ struct ContentView: View {
     @State private var settings = YtDlpSettings.load()
     @State private var showSettings = false
     @StateObject private var downloadManager = DownloadManager()
+    @State private var lastAutoScrollTime: Date = .distantPast
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
@@ -243,8 +244,19 @@ struct ContentView: View {
                         }
                     }
                     .onChange(of: downloadManager.downloadLogs.count) {
+                        // Throttle auto-scroll to reduce animation overhead
+                        let now = Date()
+                        let timeSinceLastScroll = now.timeIntervalSince(lastAutoScrollTime)
+                        
                         if let lastIndex = downloadManager.downloadLogs.indices.last {
-                            withAnimation(.easeInOut(duration: 0.25)) {
+                            if timeSinceLastScroll >= 0.25 {
+                                // Use animation if enough time has passed
+                                lastAutoScrollTime = now
+                                withAnimation(.easeInOut(duration: 0.25)) {
+                                    proxy.scrollTo(lastIndex, anchor: .bottom)
+                                }
+                            } else {
+                                // Skip animation during rapid updates
                                 proxy.scrollTo(lastIndex, anchor: .bottom)
                             }
                         }

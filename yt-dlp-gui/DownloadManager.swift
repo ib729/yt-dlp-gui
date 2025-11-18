@@ -26,6 +26,21 @@ class DownloadManager: ObservableObject {
     // Serial queue for synchronizing access to shared mutable state
     private let syncQueue = DispatchQueue(label: "com.ib729.yt-dlp-gui.DownloadManager.sync")
     
+    // Performance optimization: Throttling and batching
+    private static let outputProcessingInterval: TimeInterval = 0.15
+    private static let progressUpdateThreshold: Double = 0.01
+    private static let statusUpdateInterval: TimeInterval = 0.5
+    private static let logFlushInterval: TimeInterval = 0.2
+    
+    private var outputBuffer: [String] = []
+    private var outputProcessingTimer: Timer?
+    private var logBuffer: [String] = []
+    private var logFlushTimer: Timer?
+    private var lastProgressUpdate: Double = -1.0
+    private var lastStatusUpdate: Date = .distantPast
+    private var lastSpeedUpdate: Date = .distantPast
+    private let outputBufferQueue = DispatchQueue(label: "com.ib729.yt-dlp-gui.DownloadManager.outputBuffer")
+    
     init() {
         // Register for app termination notification to cleanup temp files
         NotificationCenter.default.addObserver(
@@ -41,11 +56,48 @@ class DownloadManager: ObservableObject {
     
     deinit {
         NotificationCenter.default.removeObserver(self)
+        stopProcessingTimers()
         cleanupAllTemporaryFiles()
     }
     
     @objc private func cleanupOnTermination() {
+        stopProcessingTimers()
         cleanupAllTemporaryFiles()
+    }
+    
+    private func startProcessingTimers() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            self.outputProcessingTimer?.invalidate()
+            self.outputProcessingTimer = Timer.scheduledTimer(
+                withTimeInterval: Self.outputProcessingInterval,
+                repeats: true
+            ) { [weak self] _ in
+                self?.processBufferedOutput()
+            }
+            
+            self.logFlushTimer?.invalidate()
+            self.logFlushTimer = Timer.scheduledTimer(
+                withTimeInterval: Self.logFlushInterval,
+                repeats: true
+            ) { [weak self] _ in
+                self?.flushLogBuffer()
+            }
+        }
+    }
+    
+    private func stopProcessingTimers() {
+        DispatchQueue.main.async { [weak self] in
+            self?.outputProcessingTimer?.invalidate()
+            self?.outputProcessingTimer = nil
+            self?.logFlushTimer?.invalidate()
+            self?.logFlushTimer = nil
+        }
+        
+        // Process any remaining buffered data
+        processBufferedOutput()
+        flushLogBuffer()
     }
     
     private func cleanupStaleTemporaryFiles() {
@@ -304,11 +356,27 @@ class DownloadManager: ObservableObject {
         let sanitizedMessage = sanitizeForLogging(message)
         let logEntry = "[\(timestamp)] \(sanitizedMessage)"
         
-        DispatchQueue.main.async { [weak self] in
+        outputBufferQueue.async { [weak self] in
             guard let self = self else { return }
-            self.downloadLogs.append(logEntry)
-            if self.downloadLogs.count > 1000 {
-                self.downloadLogs.removeFirst(100)
+            self.logBuffer.append(logEntry)
+        }
+    }
+    
+    private func flushLogBuffer() {
+        outputBufferQueue.async { [weak self] in
+            guard let self = self else { return }
+            
+            let logsToAdd = self.logBuffer
+            guard !logsToAdd.isEmpty else { return }
+            
+            self.logBuffer.removeAll(keepingCapacity: true)
+            
+            DispatchQueue.main.async {
+                self.downloadLogs.append(contentsOf: logsToAdd)
+                if self.downloadLogs.count > 1000 {
+                    let excess = self.downloadLogs.count - 1000
+                    self.downloadLogs.removeFirst(excess + 100)
+                }
             }
         }
     }
@@ -758,6 +826,7 @@ class DownloadManager: ObservableObject {
             self.processedDownloadPaths.removeAll()
             self.requiresPlaintextSubtitles = false
             self.cleanupTemporaryCookieFile()
+            self.stopProcessingTimers()
 
             DispatchQueue.main.async {
                 self.statusMessage = successMessage
@@ -778,6 +847,7 @@ class DownloadManager: ObservableObject {
                 self.processedDownloadPaths.removeAll()
                 self.requiresPlaintextSubtitles = false
                 self.cleanupTemporaryCookieFile()
+                self.stopProcessingTimers()
                 DispatchQueue.main.async {
                     self.statusMessage = successMessage
                     self.progress = 1.0
@@ -809,6 +879,7 @@ class DownloadManager: ObservableObject {
                         self.processedDownloadPaths.removeAll()
                         self.requiresPlaintextSubtitles = false
                         self.cleanupTemporaryCookieFile()
+                        self.stopProcessingTimers()
                         DispatchQueue.main.async {
                             self.statusMessage = errorMessage ?? "Processing failed"
                             self.progress = 0.0
@@ -1568,6 +1639,7 @@ class DownloadManager: ObservableObject {
             findYTdlpPath() : expandPath(effectiveSettings.customYtdlpPath)
 
         guard !ytdlpPath.isEmpty else {
+            stopProcessingTimers()
             DispatchQueue.main.async {
                 self.statusMessage = String(
                     format: String(
@@ -1583,6 +1655,7 @@ class DownloadManager: ObservableObject {
         }
         
         guard FileManager.default.fileExists(atPath: ytdlpPath) else {
+            stopProcessingTimers()
             DispatchQueue.main.async {
                 self.statusMessage = String(
                     format: String(
@@ -1618,7 +1691,13 @@ class DownloadManager: ObservableObject {
             self.progress = 0.0
             self.downloadSpeed = ""
             self.eta = ""
+            self.lastProgressUpdate = -1.0
+            self.lastStatusUpdate = .distantPast
+            self.lastSpeedUpdate = .distantPast
         }
+        
+        // Start processing timers for batched updates
+        startProcessingTimers()
         
         if downloadCount == 1 {
             addLog("Starting download for 1 URL")
@@ -1680,6 +1759,7 @@ class DownloadManager: ObservableObject {
                                 self.pendingProcessingFiles.removeAll()
                                 self.processedDownloadPaths.removeAll()
                                 self.requiresPlaintextSubtitles = false
+                                self.stopProcessingTimers()
                                 
                                 DispatchQueue.main.async {
                                     self.statusMessage = String(
@@ -1712,6 +1792,7 @@ class DownloadManager: ObservableObject {
                         self.downloadedFilesForSession.removeAll()
                         self.processedDownloadPaths.removeAll()
                         self.requiresPlaintextSubtitles = false
+                        self.stopProcessingTimers()
                         
                         DispatchQueue.main.async {
                             self.statusMessage = String(
@@ -1734,6 +1815,7 @@ class DownloadManager: ObservableObject {
                     self.downloadedFilesForSession.removeAll()
                     self.processedDownloadPaths.removeAll()
                     self.requiresPlaintextSubtitles = false
+                    self.stopProcessingTimers()
                     
                     DispatchQueue.main.async {
                         self.statusMessage = String(
@@ -1759,130 +1841,151 @@ class DownloadManager: ObservableObject {
     }
     
     private func parseOutput(_ output: String) {
-        DispatchQueue.main.async {
-            if self.settings?.showRawOutput == true {
+        // Update raw output immediately if enabled
+        if settings?.showRawOutput == true {
+            DispatchQueue.main.async {
                 self.rawOutput += output
             }
         }
         
+        // Buffer output lines for batch processing
         let lines = output.components(separatedBy: .newlines)
-        for line in lines {
-            let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmedLine.isEmpty else { continue }
+        outputBufferQueue.async { [weak self] in
+            guard let self = self else { return }
+            self.outputBuffer.append(contentsOf: lines)
+        }
+    }
+    
+    private func processBufferedOutput() {
+        outputBufferQueue.async { [weak self] in
+            guard let self = self else { return }
             
-            if settings?.enableVerboseLogging == true {
-                addLog("Raw output: \(trimmedLine)")
-            }
+            let linesToProcess = self.outputBuffer
+            guard !linesToProcess.isEmpty else { return }
             
-            if let destinationRange = trimmedLine.range(of: "Destination:") {
-                let rawPath = trimmedLine[destinationRange.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
-                if !rawPath.isEmpty {
-                    recordDownloadedFile(path: rawPath.trimmingCharacters(in: CharacterSet(charactersIn: "\"'")))
-                    continue
+            self.outputBuffer.removeAll(keepingCapacity: true)
+            
+            // Process lines off the main thread
+            var statusUpdates: [String] = []
+            var downloadLines: [String] = []
+            
+            for line in linesToProcess {
+                let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmedLine.isEmpty else { continue }
+                
+                if self.settings?.enableVerboseLogging == true {
+                    self.addLog("Raw output: \(trimmedLine)")
                 }
-            }
-
-            if let mergerRange = trimmedLine.range(of: "Merging formats into \"") {
-                let tail = trimmedLine[mergerRange.upperBound...]
-                if let closingQuoteIndex = tail.firstIndex(of: "\"") {
-                    let rawPath = String(tail[..<closingQuoteIndex])
-                    recordDownloadedFile(path: rawPath)
-                    continue
-                }
-            }
-
-            var recordedSubtitlePath = false
-            let subtitleMarkers = [
-                "Writing video subtitles to:",
-                "Writing subtitles to:",
-                "Writing auto subtitles to:",
-                "Writing automatic captions to:"
-            ]
-
-            for marker in subtitleMarkers {
-                if let markerRange = trimmedLine.range(of: marker) {
-                    let rawPath = trimmedLine[markerRange.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                if let destinationRange = trimmedLine.range(of: "Destination:") {
+                    let rawPath = trimmedLine[destinationRange.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
                     if !rawPath.isEmpty {
-                        let cleanedPath = rawPath.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
-                        recordDownloadedFile(path: cleanedPath)
-                        recordedSubtitlePath = true
-                        break
+                        self.recordDownloadedFile(path: rawPath.trimmingCharacters(in: CharacterSet(charactersIn: "\"'")))
+                        continue
                     }
                 }
-            }
 
-            if recordedSubtitlePath {
-                continue
-            }
+                if let mergerRange = trimmedLine.range(of: "Merging formats into \"") {
+                    let tail = trimmedLine[mergerRange.upperBound...]
+                    if let closingQuoteIndex = tail.firstIndex(of: "\"") {
+                        let rawPath = String(tail[..<closingQuoteIndex])
+                        self.recordDownloadedFile(path: rawPath)
+                        continue
+                    }
+                }
 
-            if trimmedLine.hasPrefix("Deleting existing file ") {
-                continue
-            }
-
-            if !trimmedLine.hasPrefix("[") && trimmedLine.contains("/") {
-                let lowercasedLine = trimmedLine.lowercased()
-                let knownExtensions = [
-                    "mp4", "mkv", "webm", "avi", "mov", "m4v",
-                    "m4a", "mp3", "flac", "wav", "opus", "ogg",
-                    "aac", "ts", "srt", "vtt", "ass", "ssa", "lrc",
-                    "srv1", "srv2", "srv3", "ttml", "txt"
+                var recordedSubtitlePath = false
+                let subtitleMarkers = [
+                    "Writing video subtitles to:",
+                    "Writing subtitles to:",
+                    "Writing auto subtitles to:",
+                    "Writing automatic captions to:"
                 ]
 
-                if knownExtensions.contains(where: { lowercasedLine.hasSuffix(".\($0)") }) {
-                    recordDownloadedFile(path: trimmedLine)
+                for marker in subtitleMarkers {
+                    if let markerRange = trimmedLine.range(of: marker) {
+                        let rawPath = trimmedLine[markerRange.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !rawPath.isEmpty {
+                            let cleanedPath = rawPath.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+                            self.recordDownloadedFile(path: cleanedPath)
+                            recordedSubtitlePath = true
+                            break
+                        }
+                    }
                 }
-            }
-            
-            if trimmedLine.hasPrefix("[download]") {
-                parseDownloadLine(trimmedLine)
-            } else if trimmedLine.hasPrefix("[info]") {
-                DispatchQueue.main.async {
-                    self.statusMessage = trimmedLine
+
+                if recordedSubtitlePath {
+                    continue
                 }
-            } else if trimmedLine.hasPrefix("[youtube]") {
-                DispatchQueue.main.async {
-                    self.statusMessage = trimmedLine
+
+                if trimmedLine.hasPrefix("Deleting existing file ") {
+                    continue
                 }
-            } else if trimmedLine.contains("ERROR") {
-                DispatchQueue.main.async {
-                    self.statusMessage = String(
+
+                if !trimmedLine.hasPrefix("[") && trimmedLine.contains("/") {
+                    let lowercasedLine = trimmedLine.lowercased()
+                    let knownExtensions = [
+                        "mp4", "mkv", "webm", "avi", "mov", "m4v",
+                        "m4a", "mp3", "flac", "wav", "opus", "ogg",
+                        "aac", "ts", "srt", "vtt", "ass", "ssa", "lrc",
+                        "srv1", "srv2", "srv3", "ttml", "txt"
+                    ]
+
+                    if knownExtensions.contains(where: { lowercasedLine.hasSuffix(".\($0)") }) {
+                        self.recordDownloadedFile(path: trimmedLine)
+                    }
+                }
+                
+                if trimmedLine.hasPrefix("[download]") {
+                    downloadLines.append(trimmedLine)
+                } else if trimmedLine.hasPrefix("[info]") || trimmedLine.hasPrefix("[youtube]") {
+                    statusUpdates.append(trimmedLine)
+                } else if trimmedLine.contains("ERROR") {
+                    statusUpdates.append(String(
                         format: String(
                             localized: "status_error_line",
                             comment: "Status prefix for error output"
                         ),
                         trimmedLine
-                    )
-                }
-            } else if trimmedLine.contains("WARNING") {
-                // Log specific subtitle-related warnings
-                let subtitleWarningKeywords = [
-                    "subtitle",
-                    "caption",
-                    "Requested language",
-                    "No subtitle",
-                    "not available"
-                ]
-                
-                let isSubtitleWarning = subtitleWarningKeywords.contains { keyword in
-                    trimmedLine.localizedCaseInsensitiveContains(keyword)
-                }
-                
-                if isSubtitleWarning && self.settings?.subtitleOnly == true {
-                    self.addLog("⚠️ \(trimmedLine)")
-                }
-                
-                DispatchQueue.main.async {
-                    self.statusMessage = String(
+                    ))
+                } else if trimmedLine.contains("WARNING") {
+                    let subtitleWarningKeywords = [
+                        "subtitle",
+                        "caption",
+                        "Requested language",
+                        "No subtitle",
+                        "not available"
+                    ]
+                    
+                    let isSubtitleWarning = subtitleWarningKeywords.contains { keyword in
+                        trimmedLine.localizedCaseInsensitiveContains(keyword)
+                    }
+                    
+                    if isSubtitleWarning && self.settings?.subtitleOnly == true {
+                        self.addLog("⚠️ \(trimmedLine)")
+                    }
+                    
+                    statusUpdates.append(String(
                         format: String(
                             localized: "status_warning_line",
                             comment: "Status prefix for warning output"
                         ),
                         trimmedLine
-                    )
+                    ))
+                } else if !trimmedLine.isEmpty {
+                    statusUpdates.append(trimmedLine)
                 }
-            } else {
+            }
+            
+            // Process download lines for progress updates
+            for line in downloadLines {
+                self.parseDownloadLine(line)
+            }
+            
+            // Update status message with the last meaningful status update
+            if let lastStatus = statusUpdates.last {
                 DispatchQueue.main.async {
-                    self.statusMessage = trimmedLine
+                    self.statusMessage = lastStatus
                 }
             }
         }
@@ -1908,10 +2011,19 @@ class DownloadManager: ObservableObject {
                 if let percentRange = Range(match.range(at: 1), in: line) {
                     let percentStr = String(line[percentRange])
                     if let percent = Double(percentStr) {
-                        DispatchQueue.main.async {
-                            self.progress = percent / 100.0
+                        let normalizedProgress = percent / 100.0
+                        
+                        // Only update progress if it changed by at least the threshold
+                        if abs(normalizedProgress - lastProgressUpdate) >= Self.progressUpdateThreshold {
+                            lastProgressUpdate = normalizedProgress
+                            DispatchQueue.main.async {
+                                self.progress = normalizedProgress
+                            }
+                            
+                            if settings?.enableVerboseLogging == true {
+                                addLog("✅ Progress updated: \(percent)%")
+                            }
                         }
-                        addLog("✅ Progress updated: \(percent)%")
                         foundProgress = true
                         break
                     }
@@ -1926,10 +2038,19 @@ class DownloadManager: ObservableObject {
                 if let percentRange = Range(match.range(at: 1), in: line) {
                     let percentStr = String(line[percentRange])
                     if let percent = Double(percentStr) {
-                        DispatchQueue.main.async {
-                            self.progress = percent / 100.0
+                        let normalizedProgress = percent / 100.0
+                        
+                        // Only update progress if it changed by at least the threshold
+                        if abs(normalizedProgress - lastProgressUpdate) >= Self.progressUpdateThreshold {
+                            lastProgressUpdate = normalizedProgress
+                            DispatchQueue.main.async {
+                                self.progress = normalizedProgress
+                            }
+                            
+                            if settings?.enableVerboseLogging == true {
+                                addLog("✅ Progress (fallback): \(percent)%")
+                            }
                         }
-                        addLog("✅ Progress (fallback): \(percent)%")
                         foundProgress = true
                     }
                 }
@@ -1942,62 +2063,67 @@ class DownloadManager: ObservableObject {
             addLog("⚠️ Could not parse progress from: \(line)")
         }
         
-        let speedPatterns = [
-            #"(\d+\.?\d*\s*[KMG]iB/s)"#,                       // 1.2 MiB/s
-            #"(\d+\.?\d*[KMG]B/s)"#,                           // 1.2 MB/s
-            #"(\d+\.?\d*\s*[KMG]iB/s)"#,                       // 1.2MiB/s
-            #"(\d+\.?\d*\s*kb/s)"#                             // 1200 kb/s
-        ]
-        
-        for speedPattern in speedPatterns {
-            if let regex = try? NSRegularExpression(pattern: speedPattern, options: .caseInsensitive),
-               let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) {
-                
-                if let speedRange = Range(match.range(at: 1), in: line) {
-                    let speed = String(line[speedRange]).trimmingCharacters(in: .whitespaces)
-                    DispatchQueue.main.async {
-                        self.downloadSpeed = speed
+        // Throttle speed updates to reduce UI churn
+        let now = Date()
+        if now.timeIntervalSince(lastSpeedUpdate) >= Self.statusUpdateInterval {
+            let speedPatterns = [
+                #"(\d+\.?\d*\s*[KMG]iB/s)"#,                       // 1.2 MiB/s
+                #"(\d+\.?\d*[KMG]B/s)"#,                           // 1.2 MB/s
+                #"(\d+\.?\d*\s*[KMG]iB/s)"#,                       // 1.2MiB/s
+                #"(\d+\.?\d*\s*kb/s)"#                             // 1200 kb/s
+            ]
+            
+            for speedPattern in speedPatterns {
+                if let regex = try? NSRegularExpression(pattern: speedPattern, options: .caseInsensitive),
+                   let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) {
+                    
+                    if let speedRange = Range(match.range(at: 1), in: line) {
+                        let speed = String(line[speedRange]).trimmingCharacters(in: .whitespaces)
+                        lastSpeedUpdate = now
+                        DispatchQueue.main.async {
+                            self.downloadSpeed = speed
+                        }
+                        if settings?.enableVerboseLogging == true {
+                            addLog("Speed: \(speed)")
+                        }
+                        break
                     }
-                    if settings?.enableVerboseLogging == true {
-                        addLog("Speed: \(speed)")
-                    }
-                    break
                 }
             }
         }
         
-        let etaPatterns = [
-            #"ETA\s+(\d+:\d+:\d+)"#,                           // ETA 00:01:23
-            #"ETA\s+(\d+:\d+)"#,                               // ETA 01:23
-            #"(\d+:\d+:\d+)\s+ETA"#,                           // 00:01:23 ETA
-            #"(\d+:\d+)\s+ETA"#                                // 01:23 ETA
-        ]
-        
-        for etaPattern in etaPatterns {
-            if let regex = try? NSRegularExpression(pattern: etaPattern, options: .caseInsensitive),
-               let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) {
-                
-                if let etaRange = Range(match.range(at: 1), in: line) {
-                    let eta = String(line[etaRange])
-                    DispatchQueue.main.async {
-                        self.eta = String(
-                            format: String(
-                                localized: "status_eta_format",
-                                comment: "ETA label with time placeholder"
-                            ),
-                            eta
-                        )
+        // Throttle ETA updates to reduce UI churn
+        if now.timeIntervalSince(lastStatusUpdate) >= Self.statusUpdateInterval {
+            let etaPatterns = [
+                #"ETA\s+(\d+:\d+:\d+)"#,                           // ETA 00:01:23
+                #"ETA\s+(\d+:\d+)"#,                               // ETA 01:23
+                #"(\d+:\d+:\d+)\s+ETA"#,                           // 00:01:23 ETA
+                #"(\d+:\d+)\s+ETA"#                                // 01:23 ETA
+            ]
+            
+            for etaPattern in etaPatterns {
+                if let regex = try? NSRegularExpression(pattern: etaPattern, options: .caseInsensitive),
+                   let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) {
+                    
+                    if let etaRange = Range(match.range(at: 1), in: line) {
+                        let eta = String(line[etaRange])
+                        lastStatusUpdate = now
+                        DispatchQueue.main.async {
+                            self.eta = String(
+                                format: String(
+                                    localized: "status_eta_format",
+                                    comment: "ETA label with time placeholder"
+                                ),
+                                eta
+                            )
+                        }
+                        if settings?.enableVerboseLogging == true {
+                            addLog("ETA: \(eta)")
+                        }
+                        break
                     }
-                    if settings?.enableVerboseLogging == true {
-                        addLog("ETA: \(eta)")
-                    }
-                    break
                 }
             }
-        }
-        
-        DispatchQueue.main.async {
-            self.statusMessage = line
         }
     }
     
@@ -2012,6 +2138,7 @@ class DownloadManager: ObservableObject {
                 }
             }
         }
+        stopProcessingTimers()
         cleanupTemporaryCookieFile()
         addLog("Download cancelled by user")
         DispatchQueue.main.async {
